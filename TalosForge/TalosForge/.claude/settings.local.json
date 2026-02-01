@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(pytest:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(pip install:*)",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''C:\\\\Users\\\\stoka\\\\Documents\\\\Artima-tests\\\\TalosForge'' -Filter *.md -Recurse -File | Select-Object -ExpandProperty FullName\")"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "Generate a realistic Czech full name (e.g., Jan Novák, Marie Svobodová)"
+    },
+    "address": {
+      "type": "string",
+      "description": "Generate a realistic Czech street address with postal code (e.g., Pařížská 12, Praha 1, 110 00)"
+    },
+    "birth_number": {
+      "type": "string",
+      "format": "czech-id",
+      "description": "Czech birth number (rodné číslo) in format YYMMDD/XXXX"
+    },
+    "ssn": {
+      "type": "string",
+      "format": "ssn",
+      "description": "Czech social security number"
+    }
+  },
+  "required": ["full_name", "address"]
+}

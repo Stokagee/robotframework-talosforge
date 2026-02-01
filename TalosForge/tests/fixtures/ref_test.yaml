@@ -1,0 +1,98 @@
+openapi: 3.0.0
+info:
+  title: Ref Test API
+  version: 1.0.0
+paths:
+  /users:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: User created
+  /products:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Product created
+  /orders:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                product_id:
+                  type: integer
+                quantity:
+                  type: integer
+              required:
+                - user_id
+                - product_id
+                - quantity
+      responses:
+        '201':
+          description: Order created
+  /nested:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtendedUser'
+      responses:
+        '201':
+          description: Nested ref created
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        age:
+          type: integer
+          minimum: 18
+          maximum: 120
+      required:
+        - name
+        - email
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        price:
+          type: number
+          minimum: 0
+      required:
+        - name
+    BaseUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+      required:
+        - id
+        - username
+    ExtendedUser:
+      $ref: '#/components/schemas/BaseUser'

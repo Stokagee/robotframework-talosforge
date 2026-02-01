@@ -1,0 +1,12 @@
+# Core dependencies
+robotframework>=7.0
+faker
+PyYAML
+requests
+openai>=1.0
+
+# Development dependencies
+pytest>=7.0
+pytest-mock>=3.10
+flake8
+black

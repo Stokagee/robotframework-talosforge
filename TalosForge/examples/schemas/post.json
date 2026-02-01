@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100
+    },
+    "body": {
+      "type": "string",
+      "minLength": 10
+    },
+    "userId": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": ["title", "body", "userId"]
+}

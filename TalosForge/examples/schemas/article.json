@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Generate a catchy blog post title about test automation and software quality"
+    },
+    "content": {
+      "type": "string",
+      "description": "Generate a 200-word blog post about the benefits of automated testing in software development. Include practical examples and best practices.",
+      "minLength": 200
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 2,
+      "maxItems": 5
+    }
+  },
+  "required": ["title", "content"]
+}

@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "product_code": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}[0-9]{6}[A-Z]{2}$",
+      "description": "Product code in format: 3 uppercase letters, 6 digits, 2 uppercase letters (e.g., ABC123456XY)"
+    },
+    "serial_number": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{16}$",
+      "description": "16-character alphanumeric serial number"
+    }
+  },
+  "required": ["product_code"]
+}

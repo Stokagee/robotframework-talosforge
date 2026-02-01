@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "properties": {
+    "contact": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "email",
+          "description": "Email address contact method"
+        },
+        {
+          "type": "string",
+          "format": "phone",
+          "description": "Phone number contact method"
+        }
+      ]
+    },
+    "user_type": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["individual"],
+          "description": "Individual user account"
+        },
+        {
+          "type": "string",
+          "enum": ["business"],
+          "description": "Business user account"
+        },
+        {
+          "type": "string",
+          "enum": ["admin"],
+          "description": "Administrator account"
+        }
+      ]
+    }
+  },
+  "required": ["contact", "user_type"]
+}
