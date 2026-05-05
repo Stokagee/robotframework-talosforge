@@ -375,7 +375,14 @@ class TalosForge:
             validator = SchemaValidator(schema)
             return validator.validate(data, return_errors=return_errors)
 
-        # Phase 2: endpoint
+        # Phase 3: openapi_url (zkontrolovat PŘED endpoint-only větví,
+        # protože openapi_url používá endpoint+method jako podparametry)
+        if openapi_url:
+            raise NotImplementedError(
+                "Validation against online OpenAPI URL is coming in Phase 3"
+            )
+
+        # Phase 2: endpoint (bez openapi_url)
         if endpoint:
             key = self._resolve_endpoint_key(method, endpoint)
 
@@ -410,12 +417,6 @@ class TalosForge:
             registry = self.schema_loader.build_registry(matched_spec)
             validator = SchemaValidator(schema, registry=registry)
             return validator.validate(data, return_errors=return_errors)
-
-        # Phase 3: openapi_url - implementace v navazujícím PR
-        if openapi_url:
-            raise NotImplementedError(
-                "Validation against online OpenAPI URL is coming in Phase 3"
-            )
 
         raise TalosForgeException(
             "Musí být specifikován právě jeden zdroj: schema_path, endpoint nebo openapi_url"
