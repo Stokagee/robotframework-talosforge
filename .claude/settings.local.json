@@ -10,7 +10,11 @@
       "Bash(tree:*)",
       "Bash(make html:*)",
       "Bash(pytest:*)",
-      "Bash(sphinx-build:*)"
+      "Bash(sphinx-build:*)",
+      "Bash(git push *)",
+      "Bash(git switch *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
