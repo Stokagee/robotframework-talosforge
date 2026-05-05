@@ -12,7 +12,7 @@ Kompletní reference všech tříd a metod TalosForge.
 Hlavní třída
 ------------
 
-.. py:class:: talosforge.TalosForge
+.. py:class:: TalosForge.TalosForge
 
     Hlavní třída TalosForge knihovny pro Robot Framework.
 
@@ -79,12 +79,12 @@ Hlavní třída
 Core moduly
 -----------
 
-.. py:module:: talosforge.core
+.. py:module:: TalosForge.core
     :synopsis: Hlavní logika generování
 
 Core moduly obsahují klíčové komponenty pro generování dat.
 
-.. py:class:: talosforge.core.generator.DataGenerator
+.. py:class:: TalosForge.core.generator.DataGenerator
 
     Generátor testovacích dat pomocí Fakeru.
 
@@ -110,7 +110,7 @@ Core moduly obsahují klíčové komponenty pro generování dat.
     * ``_handle_enum`` - enum hodnoty
     * ``_handle_oneof_anyof_allof`` - oneOf/anyOf/allOf konstrukce
 
-.. py:class:: talosforge.core.ai_generator.AIGenerator
+.. py:class:: TalosForge.core.ai_generator.AIGenerator
 
     Generátor testovacích dat pomocí AI modelů.
 
@@ -127,7 +127,7 @@ Core moduly obsahují klíčové komponenty pro generování dat.
 
     Používá OpenAI nebo Zhipu AI podle dostupnosti API klíčů.
 
-.. py:class:: talosforge.schema.loader.SchemaLoader
+.. py:class:: TalosForge.schema.loader.SchemaLoader
 
     Načítá a parsuje JSON a OpenAPI schémata.
 
@@ -138,7 +138,7 @@ Core moduly obsahují klíčové komponenty pro generování dat.
     * ``extract_endpoint_schemas(spec)`` - Extrahuje schémata z requestBody
     * ``load_openapi_spec_from_url(spec_url)`` - Stáhne specifikaci z URL
 
-.. py:class:: talosforge.utils.cache.SimpleCache
+.. py:class:: TalosForge.utils.cache.SimpleCache
 
     Jednoduchá mezipaměť pro URL specifikace.
 
@@ -155,7 +155,7 @@ Core moduly obsahují klíčové komponenty pro generování dat.
 Výjimky
 --------
 
-.. py:exception:: talosforge.core.exceptions.TalosForgeException
+.. py:exception:: TalosForge.core.exceptions.TalosForgeException
 
     Základní výjimka pro TalosForge.
 

@@ -361,7 +361,7 @@ Před importem TalosForge můžete nastavit environment variables v Pythonu:
     os.environ["TAOSFORGE_AI_PROVIDER"] = "openai"
 
     # Import až po nastavení
-    from talosforge import TalosForge
+    from TalosForge import TalosForge
 
     forge = TalosForge()
     data = forge.generate_data_from_schema(schema_path="./user.json")
