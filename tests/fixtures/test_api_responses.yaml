@@ -1,0 +1,93 @@
+openapi: 3.0.0
+info:
+  title: Test API for response-schema validation
+  version: 1.0.0
+
+paths:
+  /users:
+    post:
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /items:
+    post:
+      summary: Create an item (no $ref - round-trip safe)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name]
+              properties:
+                id:
+                  type: integer
+                  minimum: 1
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 30
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name]
+                properties:
+                  id:
+                    type: integer
+                    minimum: 1
+                  name:
+                    type: string
+                    minLength: 2
+                    maxLength: 30
+
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, name, address]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          minLength: 2
+        address:
+          $ref: '#/components/schemas/Address'
+    Address:
+      type: object
+      required: [city]
+      properties:
+        city:
+          type: string
+        country:
+          type: string
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string

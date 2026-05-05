@@ -335,3 +335,103 @@ class SchemaLoader:
             raise TalosForgeException(f"Neplatný YAML formát v odpovědi z {spec_url}: {e}")
         except Exception as e:
             raise TalosForgeException(f"Neočekávaná chyba při zpracování {spec_url}: {e}")
+
+    def extract_response_schemas(
+        self, spec: Dict[str, Any]
+    ) -> Dict[str, Dict[int, Dict[str, Any]]]:
+        """
+        Extrahuje response schémata z OpenAPI 3.0 specifikace.
+
+        Vrací slovník mapující "METHOD /path" na {status_code: schema}.
+        Jen numerické status code se zahrnují; 'default', '2XX' a '4XX'
+        se ignorují (viz https://github.com/Stokagee/robotframework-talosforge/issues/2).
+
+        Schémata se vrací beze změny — $refs nejsou pre-resolvnuty.
+        Pro $ref resolution použij build_registry() a předej ho do
+        SchemaValidator (Possibility B per IMPLEMENTATION_PLAN.md §3.2).
+
+        Args:
+            spec: OpenAPI 3.0 specifikace.
+
+        Returns:
+            Slovník {"METHOD /path": {status_code: schema}}.
+            Endpointy bez numerických response kódů nebo bez application/json
+            content nejsou zahrnuty.
+
+        Raises:
+            TalosForgeException: pokud spec neobsahuje paths.
+        """
+        result: Dict[str, Dict[int, Dict[str, Any]]] = {}
+
+        paths = spec.get("paths", {})
+        if not paths:
+            raise TalosForgeException("OpenAPI specifikace neobsahuje žádné paths")
+
+        valid_methods = ("get", "post", "put", "patch", "delete", "options", "head")
+
+        for path, path_item in paths.items():
+            if not isinstance(path_item, dict):
+                continue
+            for method, method_spec in path_item.items():
+                if method.lower() not in valid_methods:
+                    continue
+                if not isinstance(method_spec, dict):
+                    continue
+
+                responses = method_spec.get("responses", {})
+                response_schemas: Dict[int, Dict[str, Any]] = {}
+                for status_code, response_def in responses.items():
+                    if not isinstance(response_def, dict):
+                        continue
+                    try:
+                        code = int(status_code)
+                    except (ValueError, TypeError):
+                        continue
+
+                    content = response_def.get("content", {})
+                    json_content = content.get("application/json") or content.get("*/*")
+                    if not json_content:
+                        continue
+
+                    schema = json_content.get("schema")
+                    if schema:
+                        response_schemas[code] = schema
+
+                if response_schemas:
+                    key = f"{method.upper()} {path}"
+                    result[key] = response_schemas
+
+        return result
+
+    def build_registry(self, spec: Dict[str, Any]):
+        """
+        Postaví referencing.Registry z OpenAPI specifikace pro $ref resolution.
+
+        Components.schemas se hluboce zkopírují a každá komponenta se prožene
+        SchemaValidator._enforce_strict (varianta (b) per Q1) — tj. registry
+        rozlišuje refy na strict-ifikované verze, ale originální spec dict
+        zůstává nezměněný.
+
+        Args:
+            spec: OpenAPI 3.0 specifikace (nebude mutována).
+
+        Returns:
+            referencing.Registry s root resource pod URI '' (relativní refy
+            jako '#/components/schemas/User' se resolvnou skrz tuto registry).
+        """
+        from copy import deepcopy
+
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        from ..validation.validator import SPEC_URI, SchemaValidator
+
+        spec_copy = deepcopy(spec)
+        components_schemas = spec_copy.get("components", {}).get("schemas", {})
+        for comp_schema in components_schemas.values():
+            SchemaValidator._enforce_strict(comp_schema)
+
+        resource = Resource.from_contents(
+            spec_copy, default_specification=DRAFT202012
+        )
+        return Registry().with_resource(uri=SPEC_URI, resource=resource)

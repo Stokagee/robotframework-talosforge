@@ -28,6 +28,7 @@ dependencies = [
     "requests",
     "openai>=1.0",
     "rapidfuzz>=3.0.0",
+    "openapi-schema-validator>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +36,7 @@ ai = ["openai>=1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-mock>=3.10",
+    "responses>=0.23",
     "flake8",
     "black",
 ]

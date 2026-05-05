@@ -4,17 +4,44 @@ Všechny významné změny projektu TalosForge budou dokumentovány v tomto soub
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.4.0] - 2026-05-05
 
 ### Přidáno
-- **UniversalFieldParser**: Nový inteligentní parser názvů polí
+
+**Nové keywords:**
+- **`Validate Data Against Schema`** pro validaci dat proti JSON Schema a OpenAPI 3.0
+  - Tři typy zdrojů: `schema_path` (lokální JSON Schema), `endpoint`+`method` (předem načtené OpenAPI), `openapi_url` (online OpenAPI specifikace)
+  - Strict mode validace (vždy zapnutá, `additionalProperties: false` se aplikuje na všechny object schémata včetně vnořených objektů a `$ref`-resolvovaných komponent)
+  - Parametr `return_errors=True` pro získání chyb jako seznam místo raise
+  - Round-trip workflow: `Generate Data From Schema` + `Validate Data Against Schema` sdílí schémata pro contract testing
+
+**Nové parametry v existujících keywords:**
+- **`method` v `Generate Data From Schema`**: nový samostatný parametr pro HTTP metodu. Preferovaný způsob specifikace HTTP metody (vyhýbá se problémům s parsováním mezer v Robot Frameworku). Příklad: `method=POST endpoint=/users`. Stará syntaxe `endpoint=POST /users` stále funguje pro zpětnou kompatibilitu.
+
+**Nové moduly a API:**
+- **`TalosForge/validation/`** package: `SchemaValidator`, `DataValidationError`, error formatting helpers
+  - `SchemaValidator` wrapper kolem `OAS30Validator` s hardcoded strict modem, format checker (`email`, `uuid`, `int32`, ...) a podporou registry pro $ref resolution
+- **`SchemaLoader.extract_response_schemas()`**: extrakce response schémat z OpenAPI 3.0 specifikace (numerické status kódy)
+- **`SchemaLoader.build_registry()`**: konstrukce `referencing.Registry` pro `$ref` resolution s automatickou strict-ifikací `components.schemas` přes deepcopy
+- **`UniversalFieldParser`** v `TalosForge/core/generator.py`: inteligentní parser názvů polí
   - Token-based N-gram matching pro rychlou detekci typů polí
   - RapidFuzz fuzzy matching pro řešení překlepů a variant názvů
   - Podpora snake_case, camelCase, PascalCase, kebab-case
   - Rozpozná 50+ typů polí (email, phone, name, address, tags, atd.)
   - Automatická detekce kolekcí (tags, items, list, array)
   - Automatické odstraňování duplikátů v tag/categories polích
-- **Nová dependency**: `rapidfuzz>=3.0.0` pro fuzzy matching
+
+### Závislosti
+- Přidáno `openapi-schema-validator>=0.7.0` (validation feature)
+- Přidáno `responses>=0.23` jako dev dependency (HTTP mocking pro integration testy)
+- Přidáno `rapidfuzz>=3.0.0` (UniversalFieldParser fuzzy matching)
+- `referencing>=0.30` (transitivně přes `jsonschema>=4.18`, použito pro $ref registry)
+
+### Mimo scope (sledováno jako issues)
+- Statuové kódy `default` a range (`2XX`, `4XX`) v response validaci: https://github.com/Stokagee/robotframework-talosforge/issues/2
+- Public `Clear Schema Cache` keyword pro explicit URL cache invalidation: GitHub issue (URL TBD)
+- Generator: `nullable: true` se ignoruje (`_is_nullable` helper existuje, ale není zapojený v dispatchi)
+- Generator: `_handle_oneof_anyof_allof` se nikdy nevolá z `generate()` dispatcheru
 
 ### Změněno
 - `_get_context_value()` nyní používá UniversalFieldParser místo hardcoded shod
@@ -28,9 +55,6 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `customer_phone` → telefonní číslo (např. "+420 774 442 642")
   - `pickup_address` → adresa (např. "Ke Břvům 829")
 - **Složené názvy polí**: Pole s prefixy (customer_, user_, pickup_, atd.) jsou nyní správně rozpoznána
-
-### Přidáno (dříve)
-- **Parametr `method`**: Nový samostatný parametr pro HTTP metodu v `Generate Data From Schema`. Toto je preferovaný způsob specifikace HTTP metody, protože vyhýbá problémům s parsováním mezer v Robot Frameworku. Příklad: `method=POST endpoint=/users`. Stará syntaxe `endpoint=POST /users` stále funguje pro zpětnou kompatibilitu.
 
 ## [0.3.0] - 2025-02-01
 

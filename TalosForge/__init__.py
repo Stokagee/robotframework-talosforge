@@ -40,6 +40,7 @@ class TalosForge:
         self.schema_loader = SchemaLoader()
         self.data_generator = DataGenerator()
         self._loaded_openapi_schemas: Dict[str, Dict[str, Any]] = {}
+        self._loaded_specs: Dict[str, Dict[str, Any]] = {}
         logger.info("TalosForge inicializován")
 
     @keyword
@@ -79,6 +80,7 @@ class TalosForge:
 
             # Uložení do paměti
             self._loaded_openapi_schemas[swagger_path] = endpoint_schemas
+            self._loaded_specs[swagger_path] = spec
 
             logger.info(f"Načten schéma {swagger_path} s {len(endpoint_schemas)} endpointy")
         except TalosForgeException:
@@ -317,6 +319,137 @@ class TalosForge:
         for schema in self._loaded_openapi_schemas.values():
             endpoints.extend(schema.keys())
         return sorted(list(set(endpoints)))
+
+    @keyword
+    def validate_data_against_schema(
+        self,
+        data: Any,
+        schema_path: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        method: Optional[str] = None,
+        openapi_url: Optional[str] = None,
+        response_code: int = 200,
+        return_errors: bool = False,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Validuje data proti JSON Schema nebo OpenAPI 3.0 response schématu.
+
+        Strict mode je vždy zapnutý:
+        - Extra pole, která nejsou ve schématu, vyhazují chybu
+        - Chybějící required pole vyhazují chybu
+        - Type/format/range nesoulady vyhazují chybu
+
+        Zdroje (právě jeden musí být specifikován):
+        1. schema_path - lokální JSON Schema soubor (Phase 1)
+        2. endpoint (+ method) - endpoint z předem načtené OpenAPI specifikace (Phase 2)
+        3. openapi_url (+ endpoint + method) - online OpenAPI specifikace (Phase 3)
+
+        Args:
+            data: Data k validaci (slovník nebo seznam).
+            schema_path: Cesta k lokálnímu JSON schématu.
+            endpoint: Endpoint z načteného OpenAPI (Phase 2).
+            method: HTTP metoda pro endpoint (Phase 2).
+            openapi_url: URL k OpenAPI specifikaci (Phase 3).
+            response_code: HTTP status code response schématu (default 200, Phase 2).
+            return_errors: Pokud True, vrátí seznam chyb místo raise (default False).
+
+        Returns:
+            None pokud return_errors=False a validace prošla.
+            Seznam chybových slovníků pokud return_errors=True (prázdný = validní).
+
+        Raises:
+            DataValidationError: Pokud return_errors=False a validace selhala.
+            TalosForgeException: Pokud zdroj není platný nebo není schéma nalezeno.
+
+        Example:
+            *** Test Cases ***
+            Validate User Data
+                ${data}=    Create Dictionary    name=Jan    email=jan@example.cz
+                Validate Data Against Schema    data=${data}    schema_path=./user.json
+        """
+        from .validation.validator import SchemaValidator
+
+        # Phase 1: schema_path
+        if schema_path:
+            schema = self.schema_loader.load_json_schema(schema_path)
+            validator = SchemaValidator(schema)
+            return validator.validate(data, return_errors=return_errors)
+
+        # Dispatch order: openapi_url > endpoint > schema_path. openapi_url
+        # is checked BEFORE endpoint because it uses endpoint+method as
+        # sub-parameters; running endpoint branch first when both are set
+        # would hit "no spec loaded" (URL specs are not in _loaded_specs).
+
+        # Phase 3: openapi_url
+        if openapi_url:
+            if not endpoint:
+                raise TalosForgeException(
+                    "Při použití openapi_url musí být specifikován i endpoint."
+                )
+            key = self._resolve_endpoint_key(method, endpoint)
+            # SimpleCache TTL=3600s on the underlying SchemaLoader instance.
+            # No public Clear Schema Cache keyword yet - tracked as follow-up
+            # GitHub issue #TODO.
+            spec = self.schema_loader.load_openapi_spec_from_url(openapi_url)
+            return self._validate_against_spec(
+                spec, key, response_code, data, return_errors,
+                source_label=f"spec at {openapi_url}",
+            )
+
+        # Phase 2: endpoint (bez openapi_url)
+        if endpoint:
+            key = self._resolve_endpoint_key(method, endpoint)
+            if not self._loaded_specs:
+                raise TalosForgeException(
+                    "Žádná OpenAPI specifikace není načtena. "
+                    "Nejprve použijte keyword 'Load Schema'."
+                )
+            for spec in self._loaded_specs.values():
+                if key in self.schema_loader.extract_response_schemas(spec):
+                    return self._validate_against_spec(
+                        spec, key, response_code, data, return_errors,
+                        source_label="any loaded OpenAPI spec",
+                    )
+            raise TalosForgeException(
+                f"Endpoint '{key}' not found in any loaded OpenAPI spec"
+            )
+
+        raise TalosForgeException(
+            "Musí být specifikován právě jeden zdroj: schema_path, endpoint nebo openapi_url"
+        )
+
+    def _validate_against_spec(
+        self,
+        spec: Dict[str, Any],
+        key: str,
+        response_code: int,
+        data: Any,
+        return_errors: bool,
+        source_label: str,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Validate data against the response_code schema for `key` in `spec`.
+
+        Shared between the endpoint branch (Phase 2) and the openapi_url
+        branch (Phase 3) of validate_data_against_schema. source_label is
+        embedded in error messages so the user knows which spec source
+        the error came from.
+        """
+        from .validation.validator import SchemaValidator
+
+        response_schemas = self.schema_loader.extract_response_schemas(spec)
+        if key not in response_schemas:
+            raise TalosForgeException(
+                f"Endpoint '{key}' not found in {source_label}"
+            )
+        if response_code not in response_schemas[key]:
+            available = sorted(response_schemas[key].keys())
+            raise TalosForgeException(
+                f"No schema for status code {response_code}. Available: {available}"
+            )
+        schema = response_schemas[key][response_code]
+        registry = self.schema_loader.build_registry(spec)
+        validator = SchemaValidator(schema, registry=registry)
+        return validator.validate(data, return_errors=return_errors)
 
     def _generate_placeholder_data(self, schema: Dict[str, Any]) -> Dict[str, Any]:
         """
