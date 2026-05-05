@@ -375,11 +375,41 @@ class TalosForge:
             validator = SchemaValidator(schema)
             return validator.validate(data, return_errors=return_errors)
 
-        # Phase 2: endpoint - implementace v navazujícím PR
+        # Phase 2: endpoint
         if endpoint:
-            raise NotImplementedError(
-                "Validation against loaded OpenAPI endpoint is coming in Phase 2"
-            )
+            key = self._resolve_endpoint_key(method, endpoint)
+
+            if not self._loaded_specs:
+                raise TalosForgeException(
+                    "Žádná OpenAPI specifikace není načtena. "
+                    "Nejprve použijte keyword 'Load Schema'."
+                )
+
+            matched_spec = None
+            response_schemas_for_key = None
+            for spec in self._loaded_specs.values():
+                response_schemas = self.schema_loader.extract_response_schemas(spec)
+                if key in response_schemas:
+                    matched_spec = spec
+                    response_schemas_for_key = response_schemas[key]
+                    break
+
+            if matched_spec is None:
+                raise TalosForgeException(
+                    f"Endpoint '{key}' not found in any loaded OpenAPI spec"
+                )
+
+            if response_code not in response_schemas_for_key:
+                available = sorted(response_schemas_for_key.keys())
+                raise TalosForgeException(
+                    f"No schema for status code {response_code}. "
+                    f"Available: {available}"
+                )
+
+            schema = response_schemas_for_key[response_code]
+            registry = self.schema_loader.build_registry(matched_spec)
+            validator = SchemaValidator(schema, registry=registry)
+            return validator.validate(data, return_errors=return_errors)
 
         # Phase 3: openapi_url - implementace v navazujícím PR
         if openapi_url:

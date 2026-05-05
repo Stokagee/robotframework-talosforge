@@ -13,6 +13,15 @@ from .error_formatter import error_to_dict, errors_to_message
 from .exceptions import DataValidationError
 
 
+# URI used by SchemaLoader.build_registry to register the OpenAPI spec, and
+# by SchemaValidator to rewrite fragment-only $refs into absolute references.
+# A registry resource registered under URI "" does not satisfy referencing's
+# fragment resolution for an outer schema with no $id - the validator treats
+# the schema itself as the current resource and looks up "/components/..."
+# inside it. A non-empty URI fixes this.
+SPEC_URI = "urn:talosforge:spec"
+
+
 class SchemaValidator:
     """Validates data against a JSON Schema or OpenAPI 3.0 schema.
 
@@ -28,10 +37,35 @@ class SchemaValidator:
     ):
         self.schema = self._enforce_strict(deepcopy(schema))
         self.registry = registry
+        if registry is not None:
+            self._rewrite_fragment_refs(self.schema, SPEC_URI)
         validator_kwargs = {"format_checker": oas30_format_checker}
         if registry is not None:
             validator_kwargs["registry"] = registry
         self._validator = OAS30Validator(self.schema, **validator_kwargs)
+
+    @staticmethod
+    def _rewrite_fragment_refs(node: Any, base_uri: str) -> None:
+        """In-place rewrite of fragment-only $refs to absolute base_uri#... form.
+
+        Walks the schema and replaces every {"$ref": "#/..."} with
+        {"$ref": "<base_uri>#/..."} so OAS30Validator resolves them via
+        the registry instead of treating them as fragments of the current
+        schema. Refs that are already absolute (have a scheme) are left alone.
+        """
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if (
+                    key == "$ref"
+                    and isinstance(value, str)
+                    and value.startswith("#")
+                ):
+                    node[key] = base_uri + value
+                else:
+                    SchemaValidator._rewrite_fragment_refs(value, base_uri)
+        elif isinstance(node, list):
+            for item in node:
+                SchemaValidator._rewrite_fragment_refs(item, base_uri)
 
     @staticmethod
     def _enforce_strict(schema: Dict[str, Any]) -> Dict[str, Any]:
