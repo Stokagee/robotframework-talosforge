@@ -335,3 +335,13 @@ class SchemaLoader:
             raise TalosForgeException(f"Neplatný YAML formát v odpovědi z {spec_url}: {e}")
         except Exception as e:
             raise TalosForgeException(f"Neočekávaná chyba při zpracování {spec_url}: {e}")
+
+    def extract_response_schemas(self, spec):
+        raise NotImplementedError(
+            "extract_response_schemas not implemented (Phase 2 GREEN)"
+        )
+
+    def build_registry(self, spec):
+        raise NotImplementedError(
+            "build_registry not implemented (Phase 2 GREEN)"
+        )
