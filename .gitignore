@@ -6,6 +6,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .eggs/
+.claude/
+claude.md
 
 # Testing
 .pytest_cache/

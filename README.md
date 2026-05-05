@@ -2,45 +2,45 @@
 
 **Schema-driven test data generator for Robot Framework**
 
-TalosForge je Python knihovna pro Robot Framework, která generuje testovací data na míru pomocí JSON Schema a OpenAPI specifikací. Kombinuje rychlost knihovny Faker s inteligencí AI modelů (OpenAI, Zhipu) pro komplexní případy.
+TalosForge is a Python library for Robot Framework that generates tailored test data based on JSON Schema and OpenAPI specifications. It combines the speed of the Faker library with the intelligence of AI models (OpenAI, Zhipu) for complex cases.
 
-## Funkce
+## Features
 
-- **Generování na míru**: Definujte strukturu dat pomocí JSON Schema nebo OpenAPI
-- **Hybridní přístup**: Faker pro rychlost + AI pro složité případy
-- **Univerzální výstup**: Python slovníky kompatibilní s RequestsLibrary, Browser, DatabaseLibrary
-- **Jednoduché API**: Pouze dva hlavní keywords
-- **Mezipaměť**: Automatické cachování URL specifikací
-- **Více jazyků**: Výchozí česká lokalizace, snadná změna
+- **Tailored generation**: Define data structure using JSON Schema or OpenAPI
+- **Hybrid approach**: Faker for speed + AI for complex cases
+- **Universal output**: Python dictionaries compatible with RequestsLibrary, Browser, DatabaseLibrary
+- **Simple API**: Only two main keywords
+- **Caching**: Automatic caching of URL specifications
+- **Multiple languages**: Default Czech locale, easy to change
 
-## Požadavky
+## Requirements
 
 - Python 3.11+
 - Robot Framework 7.0+
 
-## Instalace
+## Installation
 
-### Základní instalace
+### Basic installation
 
 ```bash
 pip install TalosForge
 ```
 
-### S podporou AI (volitelné)
+### With AI support (optional)
 
 ```bash
-# Pro OpenAI
+# For OpenAI
 pip install openai>=1.0
 export OPENAI_API_KEY=your_key_here
 
-# Pro Zhipu AI
+# For Zhipu AI
 pip install zhipuai
 export ZHIPU_API_KEY=your_key_here
 ```
 
-## Rychlý start
+## Quick start
 
-### 1. Vytvořte JSON schéma
+### 1. Create a JSON schema
 
 **user_schema.json:**
 ```json
@@ -65,7 +65,7 @@ export ZHIPU_API_KEY=your_key_here
 }
 ```
 
-### 2. Použití v Robot Framework
+### 2. Use it in Robot Framework
 
 ```robotframework
 *** Settings ***
@@ -75,25 +75,25 @@ Library     talosforge.TalosForge
 Generate User Data
     ${user}=    Generate Data From Schema    schema_path=./user_schema.json
     Log    ${user}
-    # Výstup: {'username': 'Jan Novák', 'email': 'jan.novak@example.cz', 'age': 25}
+    # Output: {'username': 'Jan Novák', 'email': 'jan.novak@example.cz', 'age': 25}
 ```
 
 ## Keywords
 
 ### Load Schema
 
-Načte OpenAPI soubor do paměti pro rychlejší přístup při opakovaném generování.
+Loads an OpenAPI file into memory for faster access during repeated generation.
 
-**Syntaxe:**
+**Syntax:**
 ```robotframework
 Load Schema    swagger_path=<path>    [force_reload=False]
 ```
 
-**Parametry:**
-- `swagger_path` (povinný): Cesta k lokálnímu OpenAPI (Swagger) souboru (JSON nebo YAML)
-- `force_reload` (volitelný): Vynutí znovunačtení, i když je již v paměti. Default: False
+**Parameters:**
+- `swagger_path` (required): Path to a local OpenAPI (Swagger) file (JSON or YAML)
+- `force_reload` (optional): Forces a reload even if the file is already in memory. Default: False
 
-**Příklad:**
+**Example:**
 ```robotframework
 *** Test Cases ***
 Load Large API
@@ -104,82 +104,82 @@ Load Large API
 
 ### Generate Data From Schema
 
-Generuje testovací data na základě poskytnutého schématu.
+Generates test data based on the provided schema.
 
-**Syntaxe:**
+**Syntax:**
 ```robotframework
 ${data}=    Generate Data From Schema    [source]    [target=api|ui]    [amount=1]    [use_ai=False]
 ```
 
-**Zdroje dat (musí být specifikován právě jeden):**
-- `schema_path`: Cesta k lokálnímu JSON schématu
-- `endpoint`: Endpoint ve formátu `METODA /cesta` (např. `POST /users`). Vyžaduje předchozí `Load Schema`
-- `openapi_url`: URL k online OpenAPI specifikaci. Vyžaduje `endpoint`
+**Data sources (exactly one must be specified):**
+- `schema_path`: Path to a local JSON schema
+- `endpoint`: Endpoint in the format `METHOD /path` (e.g. `POST /users`). Requires a prior `Load Schema`
+- `openapi_url`: URL to an online OpenAPI specification. Requires `endpoint`
 
-**Parametry:**
-- `method` (volitelný): HTTP metoda (např. `POST`, `GET`). Vyžaduje také `endpoint`. Toto je preferovaný způsob specifikace HTTP metody, protože vyhýbá problémům s parsováním mezer v Robot Frameworku.
-- `target` (volitelný): Formát výstupu. Možnosti: `"api"` (default) nebo `"ui"`
-- `amount` (volitelný): Počet generovaných záznamů. Default: 1
-- `use_ai` (volitelný): Povolí AI generování pro složité případy. Default: False
+**Parameters:**
+- `method` (optional): HTTP method (e.g. `POST`, `GET`). Also requires `endpoint`. This is the preferred way to specify the HTTP method, since it avoids issues with whitespace parsing in Robot Framework.
+- `target` (optional): Output format. Options: `"api"` (default) or `"ui"`
+- `amount` (optional): Number of records to generate. Default: 1
+- `use_ai` (optional): Enables AI generation for complex cases. Default: False
 
-**Návratová hodnota:**
-- Pokud `amount=1`: Vrací jeden slovník (dict)
-- Pokud `amount>1`: Vrací seznam slovníků (list)
+**Return value:**
+- If `amount=1`: Returns a single dictionary (dict)
+- If `amount>1`: Returns a list of dictionaries (list)
 
-**Příklady:**
+**Examples:**
 
 ```robotframework
-# Z lokálního JSON schématu
+# From a local JSON schema
 ${user}=    Generate Data From Schema    schema_path=./user.json
 
-# Z načteného OpenAPI souboru - NOVÁ SYNTAXE (doporučeno)
+# From a loaded OpenAPI file - NEW SYNTAX (recommended)
 Load Schema    swagger_path=./api.yaml
 ${data}=    Generate Data From Schema    method=POST    endpoint=/users    amount=5
 
-# Z načteného OpenAPI souboru - STARÁ SYNTAXE (stále funguje)
+# From a loaded OpenAPI file - OLD SYNTAX (still works)
 Load Schema    swagger_path=./api.yaml
 ${data}=    Generate Data From Schema    endpoint=POST /users    amount=5
 
-# Z online OpenAPI specifikace
+# From an online OpenAPI specification
 ${item}=    Generate Data From Schema    openapi_url=https://api.example.com/swagger.json    method=GET    endpoint=/items
 
-# Pro UI testování
+# For UI testing
 ${form}=    Generate Data From Schema    schema_path=./login.json    target=ui
 
-# S AI generováním
+# With AI generation
 ${content}=    Generate Data From Schema    schema_path=./article.json    use_ai=True
 ```
 
-**HTTP Metody**
+**HTTP Methods**
 
-Pro specifikaci HTTP metody existují dva způsoby:
+There are two ways to specify the HTTP method:
 
-1. **Samostatný parametr `method=` (doporučeno)** - vyhýbá se problémům s parsováním mezer v Robot Frameworku:
+1. **Separate `method=` parameter (recommended)** - avoids issues with whitespace parsing in Robot Framework:
    ```robotframework
    ${data}=    Generate Data From Schema    method=POST    endpoint=/api/v1/couriers/
    ```
 
-2. **Zapsané přímo v endpointu (zpětná kompatibilita)** - funguje, ale Robot Framework může parsovat mezeru jako oddělovač:
+2. **Written directly in the endpoint (backward compatibility)** - works, but Robot Framework may parse the space as a separator:
    ```robotframework
    ${data}=    Generate Data From Schema    endpoint=POST /api/v1/couriers/
    ```
 
-## Podporované JSON Schema typy
+## Supported JSON Schema types
 
-| Typ | Podporované vlastnosti |
-|-----|----------------------|
+| Type | Supported properties |
+|------|----------------------|
 | `string` | format, minLength, maxLength, pattern, description, examples |
 | `integer` | minimum, maximum, exclusiveMinimum, exclusiveMaximum, examples |
 | `number` | minimum, maximum, exclusiveMinimum, exclusiveMaximum, examples |
 | `boolean` | examples |
 | `array` | items, minItems, maxItems |
 | `object` | properties, required, default |
-| `enum` | Výčet hodnot |
-| `oneOf`, `anyOf`, `allOf` | Základní podpora (s AI) |
+| `enum` | Enumeration of values |
+| `oneOf`, `anyOf`, `allOf` | Basic support (with AI) |
 
-## Podpora příkladů (examples)
+## Examples support
 
-TalosForge podporuje `examples` pole v JSON Schema:
+TalosForge supports the `examples` field in JSON Schema:
 
 ```json
 {
@@ -192,37 +192,37 @@ TalosForge podporuje `examples` pole v JSON Schema:
 }
 ```
 
-## Priorita zpracování schématu
+## Schema processing priority
 
-TalosForge zpracovává JSON Schema v tomto pořadí:
+TalosForge processes JSON Schema in the following order:
 
-1. **enum** - Výběr náhodné hodnoty z enum seznamu (validační constraint)
-2. **examples** - Výběr náhodné hodnoty z examples seznamu
-3. **example** - *Ignorováno* (pouze jedna hodnota by blokovala Faker)
-4. **AI** - AI generování (pokud `use_ai=True`)
-5. **Faker** - Generování podle typu/formátu
+1. **enum** - Picks a random value from the enum list (validation constraint)
+2. **examples** - Picks a random value from the examples list
+3. **example** - *Ignored* (a single value would block Faker)
+4. **AI** - AI generation (if `use_ai=True`)
+5. **Faker** - Generation by type/format
 
-**Důležité:** Pole `example` (jednotné číslo) v OpenAPI specifikacích je ignorováno,
-protože obsahuje jen jednu hodnotu. Pro testovací data různorodější použijte Faker
-nebo zadejte `examples` (množné číslo) s více hodnotami.
+**Important:** The `example` field (singular) in OpenAPI specifications is ignored
+because it contains only a single value. For more varied test data, use Faker
+or specify `examples` (plural) with multiple values.
 
-## Kontextové generování (50+ field variants)
+## Contextual generation (50+ field variants)
 
-Pro běžná pole TalosForge automaticky používá správné Faker metody. Offline mód funguje bez AI pro:
+For common fields, TalosForge automatically uses the right Faker methods. Offline mode works without AI for:
 
-**Osobní údaje:** name, first_name, last_name, username, email, phone
-**Adresa:** address, street, city, zip, state, country, lat, lng
-**Organizace:** company, department, position
-**Čas:** date, time, datetime, created_at, updated_at
-**Obsah:** title, description, content, message, subject
-**Identifikátory:** id, uuid, code, sku
+**Personal data:** name, first_name, last_name, username, email, phone
+**Address:** address, street, city, zip, state, country, lat, lng
+**Organization:** company, department, position
+**Time:** date, time, datetime, created_at, updated_at
+**Content:** title, description, content, message, subject
+**Identifiers:** id, uuid, code, sku
 **WWW:** url, domain, hostname
 **Finance:** price, cost, currency, account, iban
-**Technické:** ip, port, user_agent, mac, token
-**Stav:** status, priority, level
-**Speciální:** tags, categories, type
+**Technical:** ip, port, user_agent, mac, token
+**Status:** status, priority, level
+**Special:** tags, categories, type
 
-**Příklad:**
+**Example:**
 ```json
 {
   "type": "object",
@@ -237,7 +237,7 @@ Pro běžná pole TalosForge automaticky používá správné Faker metody. Offl
 }
 ```
 
-Vygeneruje realistická data jako:
+Generates realistic data such as:
 ```json
 {
   "name": "Jan Novák",
@@ -249,9 +249,9 @@ Vygeneruje realistická data jako:
 }
 ```
 
-## Nullable podpora (OpenAPI)
+## Nullable support (OpenAPI)
 
-Pro pole s `nullable: true` existuje 20% šance na vrácení `None`:
+For fields with `nullable: true`, there is a 20% chance of returning `None`:
 
 ```json
 {
@@ -259,28 +259,28 @@ Pro pole s `nullable: true` existuje 20% šance na vrácení `None`:
 }
 ```
 
-### Podporované formáty (string)
+### Supported formats (string)
 
-- `email` - Emailová adresa
-- `date` - Datum (YYYY-MM-DD)
-- `date-time` - Datum a čas (ISO 8601)
-- `time` - Čas (HH:MM:SS)
-- `uri` - URL adresa
-- `uuid` - UUID verze 4
+- `email` - Email address
+- `date` - Date (YYYY-MM-DD)
+- `date-time` - Date and time (ISO 8601)
+- `time` - Time (HH:MM:SS)
+- `uri` - URL address
+- `uuid` - UUID version 4
 - `hostname` - Hostname
-- `ipv4`, `ipv6` - IP adresy
-- `password` - Heslo
-- `phone` - Telefonní číslo
+- `ipv4`, `ipv6` - IP addresses
+- `password` - Password
+- `phone` - Phone number
 
-## AI Generování
+## AI Generation
 
-AI se používá pro složité případy jako:
-- Přítomnost `description` ve schématu
-- Složité regulární výrazy (`pattern`)
-- `oneOf`/`anyOf`/`allOf` konstrukce
-- Specifické formáty (např. `czech-id`, `ssn`)
+AI is used for complex cases such as:
+- Presence of `description` in the schema
+- Complex regular expressions (`pattern`)
+- `oneOf`/`anyOf`/`allOf` constructs
+- Specific formats (e.g. `czech-id`, `ssn`)
 
-**Příklad s description:**
+**Example with description:**
 ```json
 {
   "type": "string",
@@ -288,15 +288,15 @@ AI se používá pro složité případy jako:
 }
 ```
 
-S `use_ai=True` TalosForge použije AI model k vygenerování českého jména.
+With `use_ai=True`, TalosForge uses an AI model to generate a Czech name.
 
-## Konfigurace
+## Configuration
 
-### Lokalizace
+### Locale
 
 ```python
 import os
-os.environ["TAOSFORGE_LOCALE"] = "en_US"  # Anglická lokalizace
+os.environ["TAOSFORGE_LOCALE"] = "en_US"  # English locale
 ```
 
 ### AI Provider
@@ -304,17 +304,17 @@ os.environ["TAOSFORGE_LOCALE"] = "en_US"  # Anglická lokalizace
 ```python
 import os
 
-# Výběr providera
-os.environ["TAOSFORGE_AI_PROVIDER"] = "openai"  # nebo "zhipu"
+# Provider selection
+os.environ["TAOSFORGE_AI_PROVIDER"] = "openai"  # or "zhipu"
 
-# Specifické modely
+# Specific models
 os.environ["TAOSFORGE_OPENAI_MODEL"] = "gpt-4"
 os.environ["TAOSFORGE_ZHIPU_MODEL"] = "glm-4"
 ```
 
-## Vývoj
+## Development
 
-### Instalace pro vývoj
+### Development installation
 
 ```bash
 git clone https://github.com/yourusername/TalosForge.git
@@ -322,61 +322,61 @@ cd TalosForge
 pip install -e ".[dev]"
 ```
 
-### Spuštění testů
+### Running tests
 
 ```bash
-# Všechny pytest testy
+# All pytest tests
 pytest
 
-# Jen jednotkové testy
+# Unit tests only
 pytest tests/unit
 
-# Integrační testy
+# Integration tests
 pytest tests/integration
 
-# Robot Framework testy
+# Robot Framework tests
 robot --outputdir results/robot tests/robot
 ```
 
-### Formátování kódu
+### Code formatting
 
 ```bash
 # Flake8 linting
 flake8 talosforge/ --max-line-length=100
 
-# Black formátování
+# Black formatting
 black talosforge/
 ```
 
-## Projektová struktura
+## Project structure
 
 ```
 talosforge/
-├── __init__.py         # Hlavní TalosForge třída
+├── __init__.py         # Main TalosForge class
 ├── core/
-│   ├── config.py       # Konfigurace
+│   ├── config.py       # Configuration
 │   ├── generator.py    # DataGenerator (Faker + AI)
 │   ├── ai_generator.py # AIGenerator
-│   └── exceptions.py   # Výjimky
+│   └── exceptions.py   # Exceptions
 ├── schema/
 │   └── loader.py       # SchemaLoader
 └── utils/
     └── cache.py        # SimpleCache
 ```
 
-## Licence
+## License
 
 Apache License 2.0
 
 ## Status
 
-**Verze 0.2.0** - Produkčně připravená
+**Version 0.2.0** - Production ready
 
-- ✅ Schema-driven generování (JSON Schema, OpenAPI)
-- ✅ Hybridní generování (Faker + AI)
-- ✅ URL podpora s cachováním
-- ✅ 44 testů (100% pokrytí)
-- ✅ Kompletní dokumentace
-- ✅ Podpora pro `examples` a `example` pole v JSON Schema
-- ✅ Kontextové generování pro 50+ field variants
-- ✅ Nullable podpora (OpenAPI specification)
+- ✅ Schema-driven generation (JSON Schema, OpenAPI)
+- ✅ Hybrid generation (Faker + AI)
+- ✅ URL support with caching
+- ✅ 44 tests (100% coverage)
+- ✅ Complete documentation
+- ✅ Support for `examples` and `example` fields in JSON Schema
+- ✅ Contextual generation for 50+ field variants
+- ✅ Nullable support (OpenAPI specification)
