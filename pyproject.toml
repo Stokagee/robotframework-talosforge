@@ -28,6 +28,7 @@ dependencies = [
     "requests",
     "openai>=1.0",
     "rapidfuzz>=3.0.0",
+    "openapi-schema-validator>=0.7.0",
 ]
 
 [project.optional-dependencies]

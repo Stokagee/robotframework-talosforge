@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "username": {"type": "string", "minLength": 5, "maxLength": 20},
+    "email": {"type": "string", "format": "email"},
+    "age": {"type": "integer", "minimum": 18, "maximum": 99}
+  },
+  "required": ["username", "email"]
+}
