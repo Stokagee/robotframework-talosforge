@@ -164,6 +164,73 @@ There are two ways to specify the HTTP method:
    ${data}=    Generate Data From Schema    endpoint=POST /api/v1/couriers/
    ```
 
+### Validate Data Against Schema
+
+Validates data against a JSON Schema or OpenAPI 3.0 response schema. The
+companion to `Generate Data From Schema` — same schema sources, opposite
+direction. Together they cover the full schema-driven contract testing loop.
+
+**Syntax:**
+```robotframework
+Validate Data Against Schema    data=${data}    [source]    [response_code=200]    [return_errors=False]
+```
+
+**Data sources (exactly one must be specified):**
+- `schema_path`: Path to a local JSON schema
+- `endpoint` + `method`: Endpoint from a previously loaded OpenAPI file (requires a prior `Load Schema`)
+- `openapi_url` + `endpoint` + `method`: Online OpenAPI specification (downloaded and cached on first use)
+
+**Parameters:**
+- `data` (required): Data to validate (dictionary or list, typically the parsed body of an HTTP response)
+- `response_code` (optional): HTTP status code whose response schema to validate against. Default: `200`. Used only with `endpoint` / `openapi_url` sources
+- `return_errors` (optional): If `True`, returns a list of error dicts instead of raising. Default: `False` (raise `DataValidationError` with a multi-error message on first failure)
+
+**Return value:**
+- `return_errors=False` (default): `None` if validation passes; raises `DataValidationError` on failure
+- `return_errors=True`: A list of error dicts (empty list = valid). Each error has `path`, `path_parts`, `message`, `validator`, `validator_value`, and `instance` fields.
+
+**Strict mode is always ON, hardcoded.** Validation rejects any of the following:
+- Field present in data but not declared in the schema (`additionalProperties: false` is enforced on every object schema, including nested objects and `$ref`-resolved components)
+- Required field missing in data
+- Type mismatch, format violation (`email`, `uuid`, `int32`, ...), `minLength`/`maxLength`, `minimum`/`maximum`, `enum` mismatch, etc.
+
+There is **no parameter to relax strict mode** — that is intentional. If you need permissive validation, validate against a non-OpenAPI schema you control.
+
+**Examples:**
+
+```robotframework
+# 1. Against a local JSON schema
+${data}=    Create Dictionary    name=Jan    email=jan@example.cz
+Validate Data Against Schema    data=${data}    schema_path=./user.json
+
+# 2. Against an endpoint from a loaded OpenAPI file
+Load Schema    swagger_path=./api.yaml
+${response}=    HTTP request returning JSON    # your library
+Validate Data Against Schema
+...    data=${response}    method=POST    endpoint=/users    response_code=${201}
+
+# 3. Against an online OpenAPI specification (downloaded and cached)
+Validate Data Against Schema
+...    data=${response}
+...    openapi_url=https://api.example.com/openapi.yaml
+...    method=GET    endpoint=/items    response_code=${200}
+
+# 4. Get errors as a list instead of raising
+${errors}=    Validate Data Against Schema
+...    data=${data}    schema_path=./user.json    return_errors=${True}
+Should Be Empty    ${errors}    # alternatively: assert and inspect the dicts
+```
+
+**Round-trip with `Generate Data From Schema`:**
+
+```robotframework
+# Generate from request body, validate against response schema (same /users endpoint)
+Load Schema    swagger_path=./api.yaml
+${data}=    Generate Data From Schema    method=POST    endpoint=/users
+Validate Data Against Schema
+...    data=${data}    method=POST    endpoint=/users    response_code=${201}
+```
+
 ## Supported JSON Schema types
 
 | Type | Supported properties |

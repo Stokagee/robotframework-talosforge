@@ -389,7 +389,7 @@ class TalosForge:
             key = self._resolve_endpoint_key(method, endpoint)
             # SimpleCache TTL=3600s on the underlying SchemaLoader instance.
             # No public Clear Schema Cache keyword yet - tracked as follow-up
-            # GitHub issue (URL TBD).
+            # GitHub issue #TODO.
             spec = self.schema_loader.load_openapi_spec_from_url(openapi_url)
             return self._validate_against_spec(
                 spec, key, response_code, data, return_errors,
