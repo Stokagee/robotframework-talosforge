@@ -28,6 +28,6 @@ results/
 # OS
 .DS_Store
 Thumbs.db
-
+.env
 # Docs
 docs/_build/
