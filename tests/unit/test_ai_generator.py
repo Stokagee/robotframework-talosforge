@@ -168,12 +168,12 @@ def test_parse_ai_response_extract_json():
     assert result.get("key") == "value"
 
 
-@patch('talosforge.core.ai_generator.OPENAI_API_KEY', 'test-key')
+@patch('TalosForge.core.ai_generator.OPENAI_API_KEY', 'test-key')
 def test_call_openai_api():
     """Test volání OpenAI API."""
     from unittest.mock import Mock, patch
 
-    with patch('talosforge.core.ai_generator.OPENAI_API_KEY', 'test-key'):
+    with patch('TalosForge.core.ai_generator.OPENAI_API_KEY', 'test-key'):
         # Reimport pro aplikaci monkey patch
         import importlib
         import TalosForge.core.config as config_module

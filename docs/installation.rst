@@ -76,7 +76,7 @@ Ověřte instalaci spuštěním Python skriptu:
 
 .. code-block:: python
 
-    from talosforge import TalosForge
+    from TalosForge import TalosForge
     t = TalosForge()
     print("TalosForge úspěšně nainstalován!")
 
@@ -111,7 +111,7 @@ Po instalaci můžete TalosForge okamžitě použít ve svých testech:
 
     python --version  # Zkontrolujte verzi Python (musí být 3.11+)
     pip show TalosForge  # Zkontrolujte instalaci
-    python -c "from talosforge import TalosForge"  # Test importu
+    python -c "from TalosForge import TalosForge"  # Test importu
 
 **Problém:** Chyby při generování s AI
 

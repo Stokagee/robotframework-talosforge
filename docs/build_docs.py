@@ -75,7 +75,7 @@ def run_command(cmd, description):
 def check_project_root():
     """Zkontroluje, zda jsme v kořenovém adresáři projektu."""
     root_indicators = [
-        "talosforge",
+        "TalosForge",
         "pyproject.toml",
         "README.md"
     ]
@@ -94,7 +94,7 @@ def check_project_root():
     if all((Path(ind).exists() for ind in root_indicators)):
         Colors.print_success("V kořenovém adresáři projektu")
     else:
-        Colors.print_error("Není v kořenovém adresáři projektu (chybí: talosforge/, pyproject.toml, README.md)")
+        Colors.print_error("Není v kořenovém adresáři projektu (chybí: TalosForge/, pyproject.toml, README.md)")
         sys.exit(1)
 
 
@@ -122,10 +122,10 @@ def check_docstrings():
 
     # Hlavní soubory ke kontrole
     files_to_check = [
-        "talosforge/__init__.py",
-        "talosforge/core/generator.py",
-        "talosforge/schema/loader.py",
-        "talosforge/core/ai_generator.py",
+        "TalosForge/__init__.py",
+        "TalosForge/core/generator.py",
+        "TalosForge/schema/loader.py",
+        "TalosForge/core/ai_generator.py",
     ]
 
     missing_docs = []

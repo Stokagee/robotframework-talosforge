@@ -69,7 +69,7 @@ export ZHIPU_API_KEY=your_key_here
 
 ```robotframework
 *** Settings ***
-Library     talosforge.TalosForge
+Library     TalosForge
 
 *** Test Cases ***
 Generate User Data

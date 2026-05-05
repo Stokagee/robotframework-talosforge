@@ -14,8 +14,9 @@ class TalosForgeException(Exception):
     specifickou pro TalosForge pomocí jediného except bloku.
 
     Example:
+        forge = TalosForge()
         try:
-            data = talosforge.generate_data_from_schema(...)
+            data = forge.generate_data_from_schema(...)
         except TalosForgeException as e:
             print(f"Chyba TalosForge: {e}")
     """

@@ -35,7 +35,7 @@ def test_is_ai_available_no_keys():
 
     # Modul potřebuje reload pro změnu environment proměnných
     import importlib
-    import talosforge.core.config as config_module
+    import TalosForge.core.config as config_module
     importlib.reload(config_module)
 
     result = config_module.is_ai_available()
