@@ -1,0 +1,43 @@
+openapi: 3.0.0
+info:
+  title: External Refs Test API
+  version: 1.0.0
+paths:
+  /users:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: './components/user.yaml#/User'
+      responses:
+        '201':
+          description: Created
+  /products:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: './components/product.yaml#/Product'
+      responses:
+        '201':
+          description: Created
+  /orders:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                product_id:
+                  type: integer
+              required:
+                - user_id
+                - product_id
+      responses:
+        '201':
+          description: Created
