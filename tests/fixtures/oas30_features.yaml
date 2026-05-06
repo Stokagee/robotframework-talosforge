@@ -1,0 +1,67 @@
+openapi: 3.0.0
+info:
+  title: OAS 3.0 features test API
+  version: 1.0.0
+  description: Used by the functional Robot tests to exercise nullable, int32, and enum features against response schemas.
+
+paths:
+  /location:
+    get:
+      summary: Returns coordinates with a nullable latitude
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lat:
+                    type: number
+                    nullable: true
+
+  /point:
+    get:
+      summary: Returns coordinates with a non-nullable latitude
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lat:
+                    type: number
+
+  /entity:
+    get:
+      summary: Returns an entity with int32-formatted id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int32
+
+  /membership:
+    get:
+      summary: Returns a membership record with an enum role
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role:
+                    type: string
+                    enum:
+                      - admin
+                      - user

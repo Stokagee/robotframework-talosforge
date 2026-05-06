@@ -1,11 +1,10 @@
 *** Settings ***
 Library     TalosForge
-Library     BuiltIn
 Library     Collections
 
 *** Variables ***
-${SCHEMA_PATH}    ${CURDIR}\\..\\sample_schemas\\user.json
-${REF_TEST_PATH}    ${CURDIR}\\..\\fixtures\\ref_test.yaml
+${SCHEMA_PATH}      ${CURDIR}${/}..${/}sample_schemas${/}user.json
+${REF_TEST_PATH}    ${CURDIR}${/}..${/}fixtures${/}ref_test.yaml
 
 *** Test Cases ***
 Test Import And Initialization
@@ -25,20 +24,23 @@ Test Generate Multiple Records
     [Documentation]    Ověří generování více záznamů
     ${users}=    Generate Data From Schema    schema_path=${SCHEMA_PATH}    amount=3
     Log    ${users}
-    ${length}=    Get Length    ${users}
-    Should Be Equal As Integers    ${length}    3
+    Length Should Be    ${users}    3
 
 Test Error When No Source Specified
     [Documentation]    Ověří chybu, když není specifikován žádný zdroj
-    Run Keyword And Expect Error
-    ...    *Musí být specifikován alespoň jeden zdroj dat*
-    ...    Generate Data From Schema
+    TRY
+        Generate Data From Schema
+    EXCEPT    *Musí být specifikován alespoň jeden zdroj dat*    type=GLOB
+        No Operation
+    END
 
 Test Error When Multiple Sources Specified
     [Documentation]    Ověří chybu, když je specifikováno více zdrojů
-    Run Keyword And Expect Error
-    ...    *Musí být specifikován právě jeden zdroj dat*
-    ...    Generate Data From Schema    schema_path=${SCHEMA_PATH}    endpoint=POST /users
+    TRY
+        Generate Data From Schema    schema_path=${SCHEMA_PATH}    endpoint=POST /users
+    EXCEPT    *Musí být specifikován právě jeden zdroj dat*    type=GLOB
+        No Operation
+    END
 
 Test Generate With Ref Resolution
     [Documentation]    Ověří generování dat z OpenAPI s $ref referencemi

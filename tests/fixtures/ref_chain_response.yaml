@@ -1,0 +1,27 @@
+openapi: 3.0.0
+info:
+  title: $ref chain response test API
+  version: 1.0.0
+  description: GET /chain returns a string whose response schema resolves through A -> B -> C.
+
+paths:
+  /chain:
+    get:
+      summary: Returns a string via a 3-link $ref chain
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/A'
+
+components:
+  schemas:
+    A:
+      $ref: '#/components/schemas/B'
+    B:
+      $ref: '#/components/schemas/C'
+    C:
+      type: string
+      minLength: 2

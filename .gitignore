@@ -8,6 +8,7 @@ __pycache__/
 .eggs/
 .claude/
 claude.md
+IMPLEMENTATION_PLAN.md
 
 # Testing
 .pytest_cache/
@@ -28,6 +29,5 @@ results/
 # OS
 .DS_Store
 Thumbs.db
-.env
 # Docs
 docs/_build/
