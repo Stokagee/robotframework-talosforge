@@ -1,0 +1,40 @@
+# TalosForge konfigurační soubor
+# Zkopírujte tento soubor jako talosforge.yml nebo ~/.talosforge/config.yml
+
+talosforge:
+  # Nastavení locale pro Faker (výchozí: cs_CZ)
+  # Možné hodnoty: cs_CZ (čeština), en_US (angličtina), atd.
+  locale: cs_CZ
+
+  # GPS region pro generování souřadnic (výchozí: EU)
+  # Možné hodnoty: CZ (Česká republika), US (USA), EU (Evropa), global (celý svět)
+  # Omezuje lat/lng souřadnice na reálné geografické oblasti
+  # CZ: lat 48.5-51.1, lng 12.0-18.9
+  # US: lat 24.5-49.4, lng -125.0 až -66.9
+  # EU: lat 36.0-71.0, lng -25.0 až 45.0
+  gps_region: EU
+
+  # AI nastavení
+  ai:
+    # Preferovaný provider: 'openai', 'zhipu' nebo 'auto' (automatická detekce)
+    provider: openai
+
+    openai:
+      # API klíč - zadejte přímo hodnotu nebo použijte environment variable
+      api_key:
+      # Model pro generování (výchozí: gpt-3.5-turbo)
+      # Možné hodnoty: gpt-4, gpt-4-turbo, gpt-3.5-turbo, atd.
+      model: gpt-4
+
+    zhipu:
+      # API klíč - zadejte přímo hodnotu nebo použijte environment variable
+      api_key: 
+      # Model pro generování (výchozí: glm-4)
+      model: glm-4
+
+  # Cache nastavení
+  cache:
+    # Používat cache pro URL specifikace (výchozí: true)
+    enabled: true
+    # TTL v sekundách (výchozí: 3600 = 1 hodina)
+    ttl: 3600
