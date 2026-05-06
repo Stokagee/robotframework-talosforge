@@ -14,8 +14,16 @@ from typing import Any, Dict, Union
 import requests
 import yaml
 
+# OPTIONAL prance import for robust OpenAPI resolving (external $ref)
+try:
+    from prance import ResolvingParser  # type: ignore
+except Exception:
+    ResolvingParser = None
+
+from ..core.config import get_config
 from ..core.exceptions import TalosForgeException
 from ..utils.cache import SimpleCache
+from ..utils.logger import log_error, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +42,35 @@ class SchemaLoader:
         >>> endpoints = loader.extract_endpoint_schemas(spec)
     """
 
-    def __init__(self, use_cache: bool = True, cache_ttl: int = 3600):
+    def __init__(
+        self, use_cache: bool = True, cache_ttl: int = 3600, allow_external_refs: bool = False
+    ):
         """
         Inicializuje SchemaLoader instanci.
 
         Args:
             use_cache: Používat cache pro URL specifikace. Default: True.
             cache_ttl: TTL pro cache v sekundách. Default: 3600 (1 hodina).
+                        Pokud je zadáno, přepíše hodnotu z konfigurace.
+            allow_external_refs: Pokud True, povolí resolving externích $ref (vyžaduje prance).
         """
-        self._cache = SimpleCache(ttl=cache_ttl) if use_cache else None
-        logger.debug(f"SchemaLoader inicializován s cache={use_cache}, ttl={cache_ttl}s")
+        # Načtení konfigurace
+        config = get_config()
+
+        # Konfigurace cache - parametry mají přednost před config file
+        if cache_ttl != 3600:  # Byl explicitně zadán jiný TTL
+            ttl = cache_ttl
+        else:
+            ttl = config.cache_ttl
+
+        cache_enabled = use_cache and config.cache_enabled
+
+        self._cache = SimpleCache(ttl=ttl) if cache_enabled else None
+        self.allow_external_refs = allow_external_refs
+        logger.debug(
+            f"SchemaLoader inicializován s cache={cache_enabled}, "
+            f"ttl={ttl}s, allow_external_refs={allow_external_refs}"
+        )
 
     def load_json_schema(self, schema_path: str) -> Dict[str, Any]:
         """
@@ -67,6 +94,7 @@ class SchemaLoader:
         path = Path(schema_path)
 
         if not path.exists():
+            log_error(f"Soubor '{schema_path}' neexistuje. Zkontrolujte cestu.")
             raise TalosForgeException(f"Soubor neexistuje: {schema_path}")
 
         try:
@@ -85,6 +113,8 @@ class SchemaLoader:
 
         Metoda automaticky detekuje formát podle přípony souboru.
         Podporuje .json, .yaml a .yml soubory.
+        Pokud je allow_external_refs=True a prance dostupný, používá prance
+        pro resolvování externích $ref.
 
         Args:
             spec_path: Cesta k OpenAPI souboru.
@@ -97,7 +127,7 @@ class SchemaLoader:
                 nebo nelze parsovat.
 
         Example:
-            >>> loader = SchemaLoader()
+            >>> loader = SchemaLoader(allow_external_refs=True)
             >>> spec = loader.load_openapi_spec("petstore.yaml")
             >>> print(spec["info"]["title"])
             'Petstore API'
@@ -105,9 +135,55 @@ class SchemaLoader:
         path = Path(spec_path)
 
         if not path.exists():
+            log_error(f"Soubor '{spec_path}' neexistuje. Zkontrolujte cestu.")
             raise TalosForgeException(f"Soubor neexistuje: {spec_path}")
 
         suffix = path.suffix.lower()
+
+        # If prance available and external refs allowed, use it for robust resolving
+        if self.allow_external_refs and ResolvingParser is not None:
+            try:
+                logger.info(f"Loading OpenAPI spec with external refs enabled: {spec_path}")
+                import os
+
+                old_cwd = os.getcwd()
+                try:
+                    # Change to spec directory so prance can resolve relative paths
+                    spec_dir = os.path.dirname(os.path.abspath(str(path)))
+                    os.chdir(spec_dir)
+
+                    # Use lazy=False for immediate parsing while in correct directory
+                    try:
+                        parser = ResolvingParser(
+                            os.path.basename(str(path)),
+                            lazy=False,
+                            strict=False,
+                            backend="openapi-spec-validator",
+                        )
+                    except Exception:
+                        logger.debug(
+                            "openapi-spec-validator backend failed, trying without backend"
+                        )
+                        parser = ResolvingParser(
+                            os.path.basename(str(path)), lazy=False, strict=False
+                        )
+
+                    # Get specification before changing CWD back
+                    spec = parser.specification
+                finally:
+                    os.chdir(old_cwd)
+
+                if spec is None:
+                    raise TalosForgeException("Prance vrátil None specification")
+                logger.debug(f"Loaded OpenAPI spec via prance from: {spec_path}")
+                return spec
+            except TalosForgeException:
+                # Re-raise TalosForge exceptions
+                raise
+            except Exception as e:
+                log_warning(
+                    f"Prance failed to parse {spec_path}: {e}. " "Falling back to simple loader."
+                )
 
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -172,8 +248,7 @@ class SchemaLoader:
                 current = current[part]
             else:
                 raise TalosForgeException(
-                    f"Reference '{ref}' nebyla nalezena. "
-                    f"Část '{part}' neexistuje."
+                    f"Reference '{ref}' nebyla nalezena. " f"Část '{part}' neexistuje."
                 )
 
         # Validace výsledku
@@ -189,6 +264,73 @@ class SchemaLoader:
 
         logger.debug(f"Rozlišena reference: {ref}")
         return current
+
+    def _is_flat_endpoint_format(self, spec: Dict[str, Any]) -> bool:
+        """
+        Detekuje vlastní 'flat' formát s klíči jako 'POST /api/v1/endpoint'.
+
+        Flat formát má klíče ve formátu 'HTTP_METHOD /path' přímo na kořenové úrovni,
+        nikoliv vnořené v 'paths' sekci jako standardní OpenAPI.
+
+        Args:
+            spec: Načtená specifikace jako slovník.
+
+        Returns:
+            True pokud je detekován flat formát, False jinak.
+
+        Example:
+            >>> loader = SchemaLoader()
+            >>> spec = {"POST /api/v1/users": {"schema": {...}}}
+            >>> loader._is_flat_endpoint_format(spec)
+            True
+        """
+        if not isinstance(spec, dict):
+            return False
+
+        # Regex pro HTTP metodu (uppercase) + mezera + cesta začínající /
+        pattern = re.compile(r"^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+")
+
+        # Zjistit zda alespoň jeden klíč odpovídá vzoru
+        for key in spec.keys():
+            if isinstance(key, str) and pattern.match(key):
+                logger.debug("Detekován flat endpoint formát")
+                return True
+
+        return False
+
+    def _extract_flat_endpoint_schemas(self, spec: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Extrahuje schémata z vlastního 'flat' formátu.
+
+        Flat formát má klíče jako 'POST /api/v1/endpoint' a každá hodnota
+        obsahuje 'schema', 'summary' a 'description'.
+
+        Args:
+            spec: Flat formát specifikace jako slovník.
+
+        Returns:
+            Slovník ve stejném formátu jako extract_endpoint_schemas():
+            {"METHOD /path": schema_dict}
+
+        Example:
+            >>> loader = SchemaLoader()
+            >>> spec = {"POST /api/v1/users": {"schema": {...}, "summary": "..."}}
+            >>> endpoints = loader._extract_flat_endpoint_schemas(spec)
+            >>> print(endpoints.keys())
+            dict_keys(['POST /api/v1/users'])
+        """
+        endpoints = {}
+        pattern = re.compile(r"^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+")
+
+        for key, value in spec.items():
+            if isinstance(key, str) and pattern.match(key):
+                if isinstance(value, dict) and "schema" in value:
+                    # Klíč je už ve správném formátu "METHOD /path"
+                    endpoints[key] = value["schema"]
+                    logger.debug(f"Extrahováno flat schéma pro: {key}")
+
+        logger.info(f"Extrahováno {len(endpoints)} flat endpoint schémat")
+        return endpoints
 
     def extract_endpoint_schemas(self, spec: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
@@ -220,6 +362,9 @@ class SchemaLoader:
         # Získání paths části z OpenAPI specifikace
         paths = spec.get("paths", {})
         if not paths:
+            # Zkusit detekovat vlastní 'flat' formát (klíče jako 'POST /api/v1/endpoint')
+            if self._is_flat_endpoint_format(spec):
+                return self._extract_flat_endpoint_schemas(spec)
             raise TalosForgeException("OpenAPI specifikace neobsahuje žádné paths")
 
         # Procházení všech cest
@@ -230,7 +375,15 @@ class SchemaLoader:
             # Procházení všech HTTP metod v cestě
             for method, method_spec in path_item.items():
                 # Zajímají nás jen HTTP metody
-                if method.lower() not in ("get", "post", "put", "patch", "delete", "options", "head"):
+                if method.lower() not in (
+                    "get",
+                    "post",
+                    "put",
+                    "patch",
+                    "delete",
+                    "options",
+                    "head",
+                ):
                     continue
 
                 if not isinstance(method_spec, dict):
@@ -256,7 +409,15 @@ class SchemaLoader:
                 if schema:
                     # Rozlišit $ref pokud existuje
                     if "$ref" in schema:
-                        schema = self._resolve_ref(spec, schema["$ref"])
+                        ref = schema["$ref"]
+                        # Skip external refs silently (they don't start with #/)
+                        if not ref.startswith("#/"):
+                            logger.debug(
+                                f"Přeskakuji endpoint s externí ref: {method.upper()} {path} - {ref}"
+                            )
+                            continue
+                        # Resolve internal refs (will raise exception if invalid)
+                        schema = self._resolve_ref(spec, ref)
 
                     endpoint_key = f"{method.upper()} {path}"
                     endpoints[endpoint_key] = schema
@@ -265,12 +426,52 @@ class SchemaLoader:
         logger.info(f"Extrahováno {len(endpoints)} endpoint schémat")
         return endpoints
 
+    def _unwrap_json_schema_if_wrapped(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Automaticky detekuje a extrahuje JSON Schema z wrapped response.
+
+        Podporované wrapper patterny:
+        - {"schema": {...}}
+        - {"data": {...}}
+        - {"result": {...}}
+
+        Tato metoda řeší problém s REST API, která vrací JSON Schema v obalu,
+        například: {"name": "product", "schema": {...}}
+
+        Args:
+            spec: Načtená specifikace (může být wrapped)
+
+        Returns:
+            Extrahované JSON Schema nebo původní spec pokud není wrapped
+
+        Example:
+            >>> wrapped = {"name": "user", "schema": {"type": "object", "properties": {...}}}
+            >>> unwrapped = loader._unwrap_json_schema_if_wrapped(wrapped)
+            >>> print(unwrapped["type"])
+            'object'
+        """
+        # Indikátory wrapperu (v pořadí priority)
+        wrapper_keys = ["schema", "data", "result"]
+
+        for key in wrapper_keys:
+            if key in spec and isinstance(spec[key], dict):
+                # Ověřit že hodnota obsahuje JSON Schema indikátory
+                candidate = spec[key]
+                if "type" in candidate or "properties" in candidate or "$schema" in candidate:
+                    logger.debug(f"Detekován wrapped JSON Schema (klíč: '{key}'), extrahuji...")
+                    return candidate
+
+        # Není wrapped, vrátit původní
+        return spec
+
     def load_openapi_spec_from_url(self, spec_url: str) -> Dict[str, Any]:
         """
         Stáhne OpenAPI specifikaci z URL.
 
         Tato metoda stáhne OpenAPI specifikaci z URL, zkusí ji parsovat
         podle Content-Type nebo přípony a vrátí jako slovník.
+        Pokud je allow_external_refs=True a prance dostupný, používá prance
+        pro resolvování externích $ref.
 
         Args:
             spec_url: URL adresa OpenAPI specifikace.
@@ -282,7 +483,7 @@ class SchemaLoader:
             TalosForgeException: Pokud stahování selže nebo nelze parsovat.
 
         Example:
-            >>> loader = SchemaLoader()
+            >>> loader = SchemaLoader(allow_external_refs=True)
             >>> spec = loader.load_openapi_spec_from_url("https://api.example.com/swagger.json")
             >>> print(spec["info"]["title"])
             'Example API'
@@ -294,9 +495,48 @@ class SchemaLoader:
                 logger.debug(f"Načteno z cache: {spec_url}")
                 return cached
 
+        # If prance available and external refs allowed, use it for robust resolving
+        if self.allow_external_refs and ResolvingParser is not None:
+            try:
+                logger.info(f"Loading OpenAPI spec from URL with external refs enabled: {spec_url}")
+                # Use lazy=False for immediate parsing
+                try:
+                    parser = ResolvingParser(
+                        spec_url, lazy=False, strict=False, backend="openapi-spec-validator"
+                    )
+                except Exception:
+                    logger.debug("openapi-spec-validator backend failed, trying without backend")
+                    parser = ResolvingParser(spec_url, lazy=False, strict=False)
+
+                spec = parser.specification
+                if spec is None:
+                    raise TalosForgeException("Prance vrátil None specification")
+                logger.debug(f"Loaded OpenAPI spec via prance from URL: {spec_url}")
+
+                # Uložit do cache
+                if self._cache:
+                    self._cache.set(spec_url, spec)
+
+                return spec
+            except TalosForgeException:
+                # Re-raise TalosForge exceptions
+                raise
+            except Exception as e:
+                log_warning(
+                    f"Prance failed to parse {spec_url}: {e}. " "Falling back to simple loader."
+                )
+
         try:
             # Stáhnout specifikaci
+            import time
+
+            start = time.time()
             response = requests.get(spec_url, timeout=30)
+            elapsed = time.time() - start
+
+            if elapsed > 10:
+                log_warning(f"Pomalá odezva z {spec_url}: {elapsed:.1f}s")
+
             response.raise_for_status()
 
             # Získat obsah
@@ -321,6 +561,10 @@ class SchemaLoader:
                     except json.JSONDecodeError:
                         spec = yaml.safe_load(content)
 
+            # Automaticky detekovat a extrahovat wrapped JSON Schema
+            # (např. REST API která vrací {"name": "...", "schema": {...}})
+            spec = self._unwrap_json_schema_if_wrapped(spec)
+
             # Uložit do cache
             if self._cache:
                 self._cache.set(spec_url, spec)
@@ -328,13 +572,27 @@ class SchemaLoader:
             logger.info(f"Stažena OpenAPI specifikace z: {spec_url}")
             return spec
 
+        except requests.exceptions.Timeout:
+            log_error(f"Timeout při stahování z {spec_url} (30s)")
+            raise TalosForgeException(f"Chyba při stahování z {spec_url}: Timeout (30s)")
+        except requests.exceptions.ConnectionError:
+            log_error(f"Nelze se připojit k {spec_url}. Zkontrolujte připojení.")
+            raise TalosForgeException(f"Chyba při stahování z {spec_url}: Nelze se připojit")
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code
+            log_error(f"HTTP chyba {status} při stahování z {spec_url}")
+            raise TalosForgeException(f"Chyba při stahování z {spec_url}: HTTP {status}")
         except requests.exceptions.RequestException as e:
+            log_error(f"Chyba při stahování z {spec_url}: {e}")
             raise TalosForgeException(f"Chyba při stahování z {spec_url}: {e}")
         except json.JSONDecodeError as e:
+            log_error(f"Neplatný JSON formát v odpovědi z {spec_url}")
             raise TalosForgeException(f"Neplatný JSON formát v odpovědi z {spec_url}: {e}")
         except yaml.YAMLError as e:
+            log_error(f"Neplatný YAML formát v odpovědi z {spec_url}")
             raise TalosForgeException(f"Neplatný YAML formát v odpovědi z {spec_url}: {e}")
         except Exception as e:
+            log_error(f"Neočekávaná chyba při zpracování {spec_url}: {e}")
             raise TalosForgeException(f"Neočekávaná chyba při zpracování {spec_url}: {e}")
 
     @staticmethod
@@ -476,7 +734,5 @@ class SchemaLoader:
         for comp_schema in components_schemas.values():
             SchemaValidator._enforce_strict(comp_schema)
 
-        resource = Resource.from_contents(
-            spec_copy, default_specification=DRAFT202012
-        )
+        resource = Resource.from_contents(spec_copy, default_specification=DRAFT202012)
         return Registry().with_resource(uri=SPEC_URI, resource=resource)

@@ -1,0 +1,13 @@
+Product:
+  type: object
+  properties:
+    name:
+      type: string
+      example: "Product Name"
+    price:
+      type: number
+      minimum: 0
+      example: 99.99
+  required:
+    - name
+    - price

@@ -14,10 +14,46 @@ from typing import Any, Dict, List, Optional, Tuple
 from faker import Faker
 from rapidfuzz import fuzz, process
 
+# OPTIONAL rstr import for regex-based generation (offline)
+try:
+    import rstr  # type: ignore
+except Exception:
+    rstr = None
+
+# OPTIONAL hypothesis-jsonschema import for explore mode (property-based testing)
+try:
+    from hypothesis_jsonschema import from_schema  # type: ignore
+except Exception:
+    from_schema = None
+
 from .ai_generator import AIGenerator
-from .config import FAKER_LOCALE
+from .config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+# GPS coordinate bounds pro různé regiony
+# Souřadnice jsou přibližné bounding boxes pro každý region
+GPS_REGION_BOUNDS: Dict[str, Dict[str, float]] = {
+    "CZ": {
+        "lat_min": 48.5,
+        "lat_max": 51.1,
+        "lng_min": 12.0,
+        "lng_max": 18.9,
+    },
+    "US": {
+        "lat_min": 24.5,
+        "lat_max": 49.4,
+        "lng_min": -125.0,
+        "lng_max": -66.9,
+    },
+    "EU": {
+        "lat_min": 36.0,
+        "lat_max": 71.0,
+        "lng_min": -25.0,
+        "lng_max": 45.0,
+    },
+}
 
 
 @dataclass
@@ -30,6 +66,7 @@ class ParseResult:
         method: Metoda detekce ('token', 'fuzzy', 'exact', 'fallback').
         is_collection: True = generovat pole.
     """
+
     field_type: str
     confidence: float
     method: str
@@ -64,12 +101,7 @@ class FuzzyFieldMatcher:
         if not self.all_variants:
             return None, 0.0
 
-        results = process.extract(
-            field_name,
-            self.all_variants,
-            scorer=fuzz.WRatio,
-            limit=1
-        )
+        results = process.extract(field_name, self.all_variants, scorer=fuzz.WRatio, limit=1)
 
         if results and results[0][1] >= threshold:
             canonical_name = results[0][0][1]
@@ -97,114 +129,108 @@ class UniversalFieldParser:
     # Multi-token patterns (nejvyšší priorita - nejprve zkontrolovat)
     MULTI_PATTERNS: Dict[Tuple[str, ...], str] = {
         # 2-gram patterns
-        ('first', 'name'): 'first_name',
-        ('last', 'name'): 'last_name',
-        ('full', 'name'): 'full_name',
-        ('given', 'name'): 'first_name',
-        ('family', 'name'): 'last_name',
-        ('user', 'name'): 'username',
-        ('phone', 'number'): 'phone',
-        ('postal', 'code'): 'zip',
-        ('street', 'name'): 'street',
-        ('zip', 'code'): 'zip',
-        ('ip', 'address'): 'ip',
-        ('mac', 'address'): 'mac',
-        ('host', 'name'): 'hostname',
-        ('api', 'key'): 'token',
-        ('account', 'number'): 'account',
+        ("first", "name"): "first_name",
+        ("last", "name"): "last_name",
+        ("full", "name"): "full_name",
+        ("given", "name"): "first_name",
+        ("family", "name"): "last_name",
+        ("user", "name"): "username",
+        ("phone", "number"): "phone",
+        ("postal", "code"): "zip",
+        ("street", "name"): "street",
+        ("zip", "code"): "zip",
+        ("ip", "address"): "ip",
+        ("mac", "address"): "mac",
+        ("host", "name"): "hostname",
+        ("api", "key"): "token",
+        ("account", "number"): "account",
     }
 
     # Semantic patterns - 1-gram (základní tokeny)
     PATTERNS: Dict[str, str] = {
         # Email a komunikace
-        'email': 'email',
-        'mail': 'email',
-        'e-mail': 'email',
-
+        "email": "email",
+        "mail": "email",
+        "e-mail": "email",
         # Telefon
-        'phone': 'phone',
-        'tel': 'phone',
-        'telephone': 'phone',
-        'mobile': 'phone',
-        'telefon': 'phone',
-
+        "phone": "phone",
+        "tel": "phone",
+        "telephone": "phone",
+        "mobile": "phone",
+        "telefon": "phone",
         # Jméno - "name" alone means full_name, but in combination it's handled by MULTI_PATTERNS
-        'name': 'full_name',
-        'jmeno': 'full_name',
-        'fname': 'first_name',
-        'firstname': 'first_name',
-        'krestni': 'first_name',
-        'lname': 'last_name',
-        'lastname': 'last_name',
-        'surname': 'last_name',
-        'prijmeni': 'last_name',
-
+        "name": "full_name",
+        "jmeno": "full_name",
+        "fname": "first_name",
+        "firstname": "first_name",
+        "krestni": "first_name",
+        "lname": "last_name",
+        "lastname": "last_name",
+        "surname": "last_name",
+        "prijmeni": "last_name",
         # Adresa
-        'address': 'address',
-        'addr': 'address',
-        'adresa': 'address',
-        'street': 'street',
-        'ulice': 'street',
-        'city': 'city',
-        'mesto': 'city',
-        'zip': 'zip',
-        'psc': 'zip',
-        'postcode': 'zip',
-
+        "address": "address",
+        "addr": "address",
+        "adresa": "address",
+        "street": "street",
+        "ulice": "street",
+        "city": "city",
+        "mesto": "city",
+        "zip": "zip",
+        "psc": "zip",
+        "postcode": "zip",
         # Organizace
-        'company': 'company',
-        'firma': 'company',
-        'organization': 'company',
-        'spolecnost': 'company',
-        'employer': 'company',
-        'department': 'department',
-        'oddeleni': 'department',
-
+        "company": "company",
+        "firma": "company",
+        "organization": "company",
+        "spolecnost": "company",
+        "employer": "company",
+        "department": "department",
+        "oddeleni": "department",
         # Čas
-        'date': 'date',
-        'datum': 'date',
-        'time': 'time',
-        'datetime': 'datetime',
-        'timestamp': 'datetime',
-
+        "date": "date",
+        "datum": "date",
+        "time": "time",
+        "datetime": "datetime",
+        "timestamp": "datetime",
         # Identifikátory
-        'uuid': 'uuid',
-        'id': 'id',
-        'code': 'code',
-        'kod': 'code',
-        'sku': 'code',
-
+        "uuid": "uuid",
+        "id": "id",
+        "code": "code",
+        "kod": "code",
+        "sku": "code",
         # WWW
-        'url': 'url',
-        'link': 'url',
-        'website': 'url',
-        'domain': 'domain',
-        'hostname': 'hostname',
-
+        "url": "url",
+        "link": "url",
+        "website": "url",
+        "domain": "domain",
+        "hostname": "hostname",
         # Finance
-        'price': 'price',
-        'cena': 'price',
-        'cost': 'price',
-        'currency': 'currency',
-        'mena': 'currency',
-        'account': 'account',
-
+        "price": "price",
+        "cena": "price",
+        "cost": "price",
+        "currency": "currency",
+        "mena": "currency",
+        "account": "account",
         # Stav a priority
-        'status': 'status',
-        'state': 'status',
-        'priority': 'priority',
-        'priorita': 'priority',
-        'level': 'level',
-
+        "status": "status",
+        "state": "status",
+        "priority": "priority",
+        "priorita": "priority",
+        "level": "level",
+        # Gender
+        "gender": "gender",
+        "pohlavi": "gender",
+        "sex": "gender",
         # Speciální
-        'tags': 'tags',
-        'tag': 'tags',
-        'categories': 'categories',
-        'category': 'categories',
-        'kategorie': 'categories',
-        'type': 'type',
-        'druh': 'type',
-        'kind': 'type',
+        "tags": "tags",
+        "tag": "tags",
+        "categories": "categories",
+        "category": "categories",
+        "kategorie": "categories",
+        "type": "type",
+        "druh": "type",
+        "kind": "type",
     }
 
     # Canonical fields s variantami pro RapidFuzzy
@@ -249,6 +275,7 @@ class UniversalFieldParser:
         "status": ["status", "state", "stav"],
         "priority": ["priority", "priorita", "prio"],
         "level": ["level", "uroven", "lvl"],
+        "gender": ["gender", "pohlavi", "pohlaví", "sex"],
         "tags": ["tags", "tag", "labels", "label"],
         "categories": ["categories", "category", "kategorie", "kat"],
         "type": ["type", "druh", "kind", "class"],
@@ -256,13 +283,23 @@ class UniversalFieldParser:
 
     # Fields that should always generate collections
     COLLECTION_FIELDS: List[str] = [
-        'tags', 'tag', 'categories', 'category', 'kategorie',
-        'items', 'list', 'array', 'set',
+        "tags",
+        "tag",
+        "categories",
+        "category",
+        "kategorie",
+        "items",
+        "list",
+        "array",
+        "set",
     ]
 
     # Prefixes indicating collection
     COLLECTION_PREFIXES: List[str] = [
-        'required_', 'optional_', 'all_', 'allowed_',
+        "required_",
+        "optional_",
+        "all_",
+        "allowed_",
     ]
 
     def __init__(self):
@@ -293,13 +330,13 @@ class UniversalFieldParser:
 
         # Nejprve rozdělit camelCase PŘED lowercasing
         # Insert underscore between lowercase and uppercase letters
-        camel_split = re.sub(r'([a-z])([A-Z])', r'\1_\2', field_name)
+        camel_split = re.sub(r"([a-z])([A-Z])", r"\1_\2", field_name)
         # Also handle PascalCase (uppercase followed by lowercase)
-        camel_split = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', camel_split)
+        camel_split = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", camel_split)
 
         # Teď lowercase a split na separátorech
         normalized = camel_split.lower()
-        parts = re.split(r'[_\-\.\s]+', normalized)
+        parts = re.split(r"[_\-\.\s]+", normalized)
 
         return [t for t in parts if t]
 
@@ -320,21 +357,44 @@ class UniversalFieldParser:
             return True
 
         # Plurální tokeny (konkrétní seznamy)
-        plural_indicators = ['tags', 'items', 'categories', 'users', 'list', 'array',
-                            'tags', 'values', 'keys', 'entries', 'elements', 'options']
+        plural_indicators = [
+            "tags",
+            "items",
+            "categories",
+            "users",
+            "list",
+            "array",
+            "tags",
+            "values",
+            "keys",
+            "entries",
+            "elements",
+            "options",
+        ]
         if any(token in plural_indicators for token in tokens):
             return True
 
         # Sufixy (ale jen konkrétní, ne obecné "s")
-        if field_lower.endswith(('_list', '_array', '_set', '_items')):
+        if field_lower.endswith(("_list", "_array", "_set", "_items")):
             return True
 
         # Tokeny končící na "s" kromě výjimek (singular words ending with s)
-        singular_words_ending_s = ['address', 'adresa', 'status', 'state',
-                                   'news', 'series', 'species', 'class',
-                                   'bus', 'gas', 'glass', 'grass']
+        singular_words_ending_s = [
+            "address",
+            "adresa",
+            "status",
+            "state",
+            "news",
+            "series",
+            "species",
+            "class",
+            "bus",
+            "gas",
+            "glass",
+            "grass",
+        ]
         for token in tokens:
-            if token.endswith('s') and token not in singular_words_ending_s:
+            if token.endswith("s") and token not in singular_words_ending_s:
                 # Potenciální plurál - ověřit délku (alespoň 3 znaky)
                 if len(token) >= 3:
                     return True
@@ -352,10 +412,7 @@ class UniversalFieldParser:
         """
         if not field_name:
             return ParseResult(
-                field_type='string',
-                confidence=0.0,
-                method='fallback',
-                is_collection=False
+                field_type="string", confidence=0.0, method="fallback", is_collection=False
             )
 
         # 1. Token-based matching (nejrychlejší)
@@ -373,8 +430,8 @@ class UniversalFieldParser:
                     return ParseResult(
                         field_type=field_type,
                         confidence=0.95,
-                        method='token',
-                        is_collection=is_collection
+                        method="token",
+                        is_collection=is_collection,
                     )
 
         # Pak zkusit single-token patterns
@@ -384,8 +441,8 @@ class UniversalFieldParser:
                 return ParseResult(
                     field_type=field_type,
                     confidence=0.90,
-                    method='token',
-                    is_collection=is_collection
+                    method="token",
+                    is_collection=is_collection,
                 )
 
         # 2. Fuzzy matching (pro překlepy a varianty)
@@ -394,16 +451,13 @@ class UniversalFieldParser:
             return ParseResult(
                 field_type=canonical,
                 confidence=score / 100,
-                method='fuzzy',
-                is_collection=is_collection
+                method="fuzzy",
+                is_collection=is_collection,
             )
 
         # 3. Fallback - žádná shoda
         return ParseResult(
-            field_type='string',
-            confidence=0.0,
-            method='fallback',
-            is_collection=is_collection
+            field_type="string", confidence=0.0, method="fallback", is_collection=is_collection
         )
 
 
@@ -424,15 +478,17 @@ class DataGenerator:
 
     def __init__(self):
         """Inicializuje DataGenerator s Faker instancí, AIGenerator a UniversalFieldParser."""
-        self.fake = Faker(FAKER_LOCALE)
+        # Dynamické načtení locale z konfigurace
+        config = get_config()
+        locale = config.locale
+
+        self.fake = Faker(locale)
         self.ai_generator = AIGenerator()
         self.field_parser = UniversalFieldParser()
-        logger.debug(f"DataGenerator inicializován s locale: {FAKER_LOCALE}")
+        logger.debug(f"DataGenerator inicializován s locale: {locale}")
         logger.debug(f"AI dostupný: {self.ai_generator.is_available()}")
 
-    def generate(
-        self, schema: Dict[str, Any], target: str = "api", use_ai: bool = False
-    ) -> Any:
+    def generate(self, schema: Dict[str, Any], target: str = "api", use_ai: bool = False) -> Any:
         """
         Generuje data podle JSON Schema.
 
@@ -462,22 +518,13 @@ class DataGenerator:
         if "enum" in schema:
             return self._handle_enum(schema)
 
-        # 2. EXAMPLES priorita
-        if value := self._get_examples_value(schema):
-            return value
+        # 2. EXAMPLES priorita - vrací tuple (has_value, value)
+        has_example, example_value = self._get_examples_value(schema)
+        if has_example:
+            return example_value
 
-        # 3. AI priorita (pokud je povoleno)
-        if use_ai and self.ai_generator.is_available() and self._should_use_ai(schema):
-            try:
-                logger.debug("Používám AI generování")
-                return self.ai_generator.generate(
-                    schema, target, schema.get("description")
-                )
-            except Exception as e:
-                logger.warning(f"AI generování selhalo, používám Faker: {e}")
-                # Fallback na Faker
-
-        # Získat typ ze schématu
+        # 3. Type inference (MOVED UP - before description enum and AI)
+        # This prevents description enum from being applied to object/array types
         schema_type = schema.get("type")
 
         # Pokud není typ, pokusíme se odvodit z jiných vlastností
@@ -490,7 +537,22 @@ class DataGenerator:
                 logger.warning("Schéma nemá definovaný typ, vracím None")
                 return None
 
-        # Dispatch podle typu
+        # 4. Description enum extraction removed - descriptions are for documentation,
+        #    not data generation. Use enum, example, or examples fields explicitly.
+
+        # 5. AI priorita (pokud je povoleno)
+        if use_ai and not self.ai_generator.is_available():
+            logger.info("use_ai=True ale AI není dostupná, používám Faker")
+
+        if use_ai and self.ai_generator.is_available() and self._should_use_ai(schema):
+            try:
+                logger.debug("Používám AI generování")
+                return self.ai_generator.generate(schema, target, schema.get("description"))
+            except Exception as e:
+                logger.warning(f"AI generování selhalo, používám Faker: {e}")
+                # Fallback na Faker
+
+        # 6. Dispatch podle typu
         if schema_type == "string":
             return self._generate_string(schema)
         elif schema_type == "integer":
@@ -509,32 +571,127 @@ class DataGenerator:
 
     def _get_examples_value(self, schema: Dict[str, Any]) -> Any:
         """
-        Získá náhodnou hodnotu z examples pole.
+        Získá hodnotu z examples nebo example pole.
 
-        Podporuje pouze "examples" (JSON Schema draft 2019-09+).
-        Pole "example" (OpenAPI 3.x) se ignoruje, protože obsahuje jen jednu
-        hodnotu a blokovala by Faker generování. Místo toho se pokračuje
-        do Faker, který vygeneruje různorodá data.
+        Vrací SENTINEL objekt pro rozlišení mezi "žádná hodnota" a "hodnota je None/False/[]".
+
+        Priorita:
+        1. "examples" (plural, JSON Schema draft 2019-09+) - náhodný výběr pro variabilitu
+        2. "example" (singular, OpenAPI 3.x) - přímé použití pro non-string typy
 
         Args:
             schema: JSON Schema slovník.
 
         Returns:
-            Náhodná hodnota z examples nebo None (pokud examples neexistuje).
-
-        Example:
-            >>> generator = DataGenerator()
-            >>> schema = {"type": "string", "examples": ["a", "b", "c"]}
-            >>> result = generator._get_examples_value(schema)
-            >>> result in ["a", "b", "c"]
-            True
+            Tuple (has_value, value) kde has_value indikuje zda byla nalezena hodnota.
         """
+        # 1. Plural examples - random selection for variety
         if "examples" in schema:
             examples = schema["examples"]
             if isinstance(examples, list) and examples:
-                return self.fake.random_element(examples)
+                logger.debug(f"[examples] Using plural examples: {examples}")
+                return (True, self.fake.random_element(examples))
 
-        # "example" (singulár) se ignoruje - necháme Faker generovat
+        # 2. Singular example - používat JEN pro non-string typy
+        #    Pro string ignorovat, aby Faker generoval různorodá data
+        if "example" in schema:
+            example = schema["example"]
+            schema_type = schema.get("type")
+            # Použít example pro: boolean, integer, number, null, array
+            # Ignorovat pro: string (chceme variabilitu od Faker)
+            if schema_type == "boolean":
+                logger.debug(f"[example] Using boolean example: {example}")
+                return (True, bool(example) if isinstance(example, bool) else example)
+            elif schema_type == "integer":
+                logger.debug(f"[example] Using integer example: {example}")
+                return (True, example)
+            elif schema_type == "number":
+                logger.debug(f"[example] Using number example: {example}")
+                return (True, example)
+            elif schema_type == "array":
+                logger.debug(f"[example] Using array example: {example}")
+                return (True, example)
+            elif isinstance(example, bool):
+                # Boolean value (even without explicit type)
+                logger.debug(f"[example] Using boolean example (inferred): {example}")
+                return (True, example)
+            elif isinstance(example, (int, float)) and not isinstance(example, bool):
+                # Numeric value
+                logger.debug(f"[example] Using numeric example (inferred): {example}")
+                return (True, example)
+            elif isinstance(example, list):
+                # Array value (including empty array)
+                logger.debug(f"[example] Using array example (inferred): {example}")
+                return (True, example)
+            elif example is None:
+                # Null value
+                logger.debug("[example] Using null example")
+                return (True, None)
+            # String example - ignorovat pro variabilitu
+            logger.debug(f"[example] Ignoring string example '{example}' for variety, using Faker")
+
+        logger.debug("[examples] No example/examples found, falling through to Faker")
+        return (False, None)
+
+    def _parse_enum_from_description(self, schema: Dict[str, Any]) -> Optional[Any]:
+        """
+        [DEPRECATED] Univerzální extrakce enum hodnot z description pole.
+
+        .. deprecated:: 0.5.0
+            Tato metoda je deprecated. Description pole je určeno pro dokumentaci,
+            nikoliv pro generování dat. Použijte explicitní 'enum', 'example' nebo
+            'examples' pole ve schématu.
+
+        Funguje pro JAKÝKOLIV typ v description: gender, status, priority, custom...
+        Podporuje české i anglické separátory: ",", " nebo ", " or ", "/", "|"
+
+        Args:
+            schema: JSON Schema slovník.
+
+        Returns:
+            Náhodná hodnota z extrahovaných hodnot nebo None.
+
+        Example:
+            >>> generator = DataGenerator()
+            >>> schema = {"description": "Pohlaví: male, female nebo other"}
+            >>> result = generator._parse_enum_from_description(schema)
+            >>> result in ["male", "female", "other"]
+            True
+            >>> schema = {"description": "Status: active, inactive, pending"}
+            >>> result = generator._parse_enum_from_description(schema)
+            >>> result in ["active", "inactive", "pending"]
+            True
+        """
+        logger.warning(
+            "[deprecated] _parse_enum_from_description is deprecated. "
+            "Use explicit 'enum', 'example' or 'examples' fields in schema."
+        )
+        description = schema.get("description", "")
+        if not description:
+            return None
+
+        # Najít část s hodnotami (po dvojtečce, nebo celý description)
+        if ":" in description:
+            values_part = description.split(":", 1)[1]
+        else:
+            values_part = description
+
+        # Oddělovače: čárka, "nebo", "or", "/", "|"
+        separators = r"\s*(?:,| nebo | or |/|\|)\s*"
+        values = re.split(separators, values_part, flags=re.IGNORECASE)
+
+        # Stop words - ignorovat
+        stop_words = {"nebo", "or", "a", "and", "etc", "atd", "hodnoty", "values"}
+
+        # Vyčistit hodnoty
+        cleaned = [v.strip() for v in values if v.strip()]
+        cleaned = [v for v in cleaned if v.lower() not in stop_words and len(v) > 1]
+
+        # Validace: alespoň 2 hodnoty
+        if len(cleaned) >= 2:
+            logger.debug(f"Extrahováno {len(cleaned)} hodnot z description: {cleaned}")
+            return self.fake.random_element(cleaned)
+
         return None
 
     def _is_nullable(self, schema: Dict[str, Any]) -> bool:
@@ -605,55 +762,67 @@ class DataGenerator:
 
             # Map field type to Faker method
             faker_map: Dict[str, Any] = {
-                'email': lambda: self.fake.email(),
-                'phone': lambda: self.fake.phone_number(),
-                'full_name': lambda: f"{self.fake.first_name()} {self.fake.last_name()}",
-                'first_name': lambda: self.fake.first_name(),
-                'last_name': lambda: self.fake.last_name(),
-                'username': lambda: self.fake.user_name(),
-                'address': lambda: self.fake.address(),
-                'street': lambda: self.fake.street_name(),
-                'city': lambda: self.fake.city(),
-                'zip': lambda: self.fake.postcode(),
-                'state': lambda: self.fake.state(),
-                'country': lambda: self.fake.country(),
-                'company': lambda: self.fake.company(),
-                'department': lambda: self.fake.catch_phrase(),
-                'position': lambda: self.fake.job(),
-                'date': lambda: self.fake.date(),
-                'time': lambda: self.fake.time(),
-                'datetime': lambda: self.fake.date_time().isoformat(),
-                'title': lambda: self.fake.sentence()[:50],
-                'description': lambda: self.fake.text(max_nb_chars=200),
-                'content': lambda: self.fake.text(max_nb_chars=500),
-                'comment': lambda: self.fake.sentence(),
-                'id': lambda: self.fake.random_int(min=1, max=999999),
-                'uuid': lambda: str(self.fake.uuid4()),
-                'code': lambda: self.fake.uuid4()[:8].upper(),
-                'url': lambda: self.fake.url(),
-                'domain': lambda: self.fake.domain_name(),
-                'hostname': lambda: self.fake.hostname(),
-                'price': lambda: round(self.fake.pyfloat(min_value=0, max_value=10000), 2),
-                'currency': lambda: "CZK",
-                'account': lambda: f"CZ{self.fake.random_int(min=100000000, max=999999999)}",
-                'ip': lambda: self.fake.ipv4(),
-                'ipv6': lambda: self.fake.ipv6(),
-                'mac': lambda: self.fake.mac_address(),
-                'port': lambda: self.fake.random_int(min=1024, max=65535),
-                'user_agent': lambda: self.fake.user_agent(),
-                'token': lambda: self.fake.uuid4(),
-                'status': lambda: self.fake.random_element(
+                "email": lambda: self.fake.email(),
+                "phone": lambda: self.fake.phone_number(),
+                "full_name": lambda: f"{self.fake.first_name()} {self.fake.last_name()}",
+                "first_name": lambda: self.fake.first_name(),
+                "last_name": lambda: self.fake.last_name(),
+                "gender": lambda: self.fake.random_element(["male", "female", "other"]),
+                "username": lambda: self.fake.user_name(),
+                "address": lambda: self.fake.address(),
+                "street": lambda: self.fake.street_name(),
+                "city": lambda: self.fake.city(),
+                "zip": lambda: self.fake.postcode(),
+                "state": lambda: self.fake.state(),
+                "country": lambda: self.fake.country(),
+                "company": lambda: self.fake.company(),
+                "department": lambda: self.fake.catch_phrase(),
+                "position": lambda: self.fake.job(),
+                "date": lambda: self.fake.date(),
+                "time": lambda: self.fake.time(),
+                "datetime": lambda: self.fake.date_time().isoformat(),
+                "title": lambda: self.fake.sentence()[:50],
+                "description": lambda: self.fake.text(max_nb_chars=200),
+                "content": lambda: self.fake.text(max_nb_chars=500),
+                "comment": lambda: self.fake.sentence(),
+                "id": lambda: self.fake.random_int(min=1, max=999999),
+                "uuid": lambda: str(self.fake.uuid4()),
+                "code": lambda: self.fake.uuid4()[:8].upper(),
+                "url": lambda: self.fake.url(),
+                "domain": lambda: self.fake.domain_name(),
+                "hostname": lambda: self.fake.hostname(),
+                "price": lambda: round(self.fake.pyfloat(min_value=0, max_value=10000), 2),
+                "currency": lambda: "CZK",
+                "account": lambda: f"CZ{self.fake.random_int(min=100000000, max=999999999)}",
+                "ip": lambda: self.fake.ipv4(),
+                "ipv6": lambda: self.fake.ipv6(),
+                "mac": lambda: self.fake.mac_address(),
+                "port": lambda: self.fake.random_int(min=1024, max=65535),
+                "user_agent": lambda: self.fake.user_agent(),
+                "token": lambda: self.fake.uuid4(),
+                "status": lambda: self.fake.random_element(
                     ["active", "inactive", "pending", "blocked", "online", "offline"]
                 ),
-                'priority': lambda: self.fake.random_element(
+                "priority": lambda: self.fake.random_element(
                     ["low", "medium", "high", "urgent", "critical"]
                 ),
-                'level': lambda: self.fake.random_int(min=1, max=10),
-                'tags': lambda: self.fake.random_element(
-                    ["vip", "urgent", "normal", "low", "bike", "car", "fragile_ok", "fast", "priority", "standard"]
+                "level": lambda: self.fake.random_int(min=1, max=10),
+                "tags": lambda: self.fake.random_element(
+                    [
+                        "vip",
+                        "urgent",
+                        "normal",
+                        "low",
+                        "bike",
+                        "car",
+                        "fragile_ok",
+                        "fast",
+                        "priority",
+                        "standard",
+                    ]
                 ),
-                'categories': lambda: self.fake.word(),
-                'type': lambda: self.fake.word(),
+                "categories": lambda: self.fake.word(),
+                "type": lambda: self.fake.word(),
             }
 
             if result.field_type in faker_map:
@@ -680,6 +849,8 @@ class DataGenerator:
             return self.fake.email()
         elif field_lower in ["username", "uzivatelske_jmeno", "user_name", "login"]:
             return self.fake.user_name()
+        elif field_lower in ["gender", "pohlavi", "sex"]:
+            return self.fake.random_element(["male", "female", "other"])
 
         # Adresa
         elif field_lower in ["address", "adresa"]:
@@ -694,10 +865,20 @@ class DataGenerator:
             return self.fake.state()
         elif field_lower in ["country", "zeme", "country_code"]:
             return self.fake.country()
+        # Přesná shoda pro lat/lng
         elif field_lower in ["lat", "latitude"]:
-            return self.fake.latitude()
+            return self._generate_bounded_coordinate("latitude")
         elif field_lower in ["lng", "lon", "longitude"]:
-            return self.fake.longitude()
+            return self._generate_bounded_coordinate("longitude")
+        # Suffixová detekce pro prefixovaná GPS pole (pickup_lat, delivery_lng, etc.)
+        elif field_lower.endswith("_lat") or field_lower.endswith("_latitude"):
+            return self._generate_bounded_coordinate("latitude")
+        elif (
+            field_lower.endswith("_lng")
+            or field_lower.endswith("_lon")
+            or field_lower.endswith("_longitude")
+        ):
+            return self._generate_bounded_coordinate("longitude")
 
         # Organizace
         elif field_lower in ["company", "spolecnost", "firma", "organization"]:
@@ -765,7 +946,9 @@ class DataGenerator:
 
         # Stav / priorita
         elif field_lower in ["status", "state"]:
-            return self.fake.random_element(["active", "inactive", "pending", "blocked", "online", "offline"])
+            return self.fake.random_element(
+                ["active", "inactive", "pending", "blocked", "online", "offline"]
+            )
         elif field_lower in ["priority", "priorita"]:
             return self.fake.random_element(["low", "medium", "high", "urgent", "critical"])
         elif field_lower in ["level", "uroven"]:
@@ -773,7 +956,20 @@ class DataGenerator:
 
         # Speciální
         elif field_lower in ["tags", "tag"]:
-            return self.fake.random_element(["vip", "urgent", "normal", "low", "bike", "car", "fragile_ok", "fast", "priority", "standard"])
+            return self.fake.random_element(
+                [
+                    "vip",
+                    "urgent",
+                    "normal",
+                    "low",
+                    "bike",
+                    "car",
+                    "fragile_ok",
+                    "fast",
+                    "priority",
+                    "standard",
+                ]
+            )
         elif field_lower in ["categories", "category", "kategorie"]:
             return self.fake.word()
         elif field_lower in ["type", "druh", "kind"]:
@@ -781,8 +977,62 @@ class DataGenerator:
 
         return None
 
+    def _generate_bounded_coordinate(self, coord_type: str) -> float:
+        """
+        Generuje GPS souřadnici v rámci nastaveného regionu.
+
+        Používá konfiguraci gps_region (env: TAOSFORGE_GPS_REGION) pro
+        omezení generovaných souřadnic na reálné geografické oblasti.
+
+        Args:
+            coord_type: 'latitude' nebo 'longitude'
+
+        Returns:
+            Souřadnice jako float.
+
+        Example:
+            >>> # S TAOSFORGE_GPS_REGION=CZ
+            >>> generator._generate_bounded_coordinate("latitude")
+            50.1234  # V rozmezí 48.5-51.1 (ČR)
+        """
+        config = get_config()
+        region = config.gps_region
+
+        # Prázdný region = použít výchozí EU
+        if region is None or region == "":
+            region = "EU"
+
+        region_upper = region.upper()
+
+        # Speciální hodnota "global" = původní Faker chování (kdekoliv na světě)
+        if region_upper == "GLOBAL":
+            if coord_type == "latitude":
+                return self.fake.latitude()
+            else:
+                return self.fake.longitude()
+
+        # Neznámý region = fallback na EU s warningem
+        if region_upper not in GPS_REGION_BOUNDS:
+            logger.warning(
+                f"Unknown GPS region '{region}'. "
+                f"Valid: {list(GPS_REGION_BOUNDS.keys())} or 'global'. "
+                "Using EU as fallback."
+            )
+            region_upper = "EU"
+
+        # Generování v bounds pomocí Faker's pyfloat (zachová seed reproducibility)
+        bounds = GPS_REGION_BOUNDS[region_upper]
+        if coord_type == "latitude":
+            return self.fake.pyfloat(min_value=bounds["lat_min"], max_value=bounds["lat_max"])
+        else:
+            return self.fake.pyfloat(min_value=bounds["lng_min"], max_value=bounds["lng_max"])
+
     def _generate_with_context(
-        self, schema: Dict[str, Any], field_name: str = None, target: str = "api", use_ai: bool = False
+        self,
+        schema: Dict[str, Any],
+        field_name: str = None,
+        target: str = "api",
+        use_ai: bool = False,
     ) -> Any:
         """
         Generuje data podle JSON Schema s kontextovým názvem pole.
@@ -802,22 +1052,13 @@ class DataGenerator:
         if "enum" in schema:
             return self._handle_enum(schema)
 
-        # 2. EXAMPLES priorita
-        if value := self._get_examples_value(schema):
-            return value
+        # 2. EXAMPLES priorita - vrací tuple (has_value, value)
+        has_example, example_value = self._get_examples_value(schema)
+        if has_example:
+            return example_value
 
-        # 3. AI priorita (pokud je povoleno)
-        if use_ai and self.ai_generator.is_available() and self._should_use_ai(schema):
-            try:
-                logger.debug("Používám AI generování")
-                return self.ai_generator.generate(
-                    schema, target, schema.get("description")
-                )
-            except Exception as e:
-                logger.warning(f"AI generování selhalo, používám Faker: {e}")
-                # Fallback na Faker
-
-        # Získat typ ze schématu
+        # 3. Type inference (MOVED UP - before description enum and AI)
+        # This prevents description enum from being applied to object/array types
         schema_type = schema.get("type")
 
         # Pokud není typ, pokusíme se odvodit z jiných vlastností
@@ -830,13 +1071,28 @@ class DataGenerator:
                 logger.warning("Schéma nemá definovaný typ, vracím None")
                 return None
 
-        # 4. KONTEXTOVÁ LOGIKA - před typovým dispatchem
+        # 4. Description enum extraction removed - descriptions are for documentation,
+        #    not data generation. Use enum, example, or examples fields explicitly.
+
+        # 5. AI priorita (pokud je povoleno)
+        if use_ai and not self.ai_generator.is_available():
+            logger.info("use_ai=True ale AI není dostupná, používám Faker")
+
+        if use_ai and self.ai_generator.is_available() and self._should_use_ai(schema):
+            try:
+                logger.debug("Používám AI generování")
+                return self.ai_generator.generate(schema, target, schema.get("description"))
+            except Exception as e:
+                logger.warning(f"AI generování selhalo, používám Faker: {e}")
+                # Fallback na Faker
+
+        # 6. KONTEXTOVÁ LOGIKA - před typovým dispatchem
         # Pro integer a number typy zkusíme kontextovou hodnotu
         if field_name and schema_type in ["integer", "number"]:
             if value := self._get_context_value(field_name, schema):
                 return value
 
-        # Dispatch podle typu s field_name
+        # 7. Dispatch podle typu s field_name
         if schema_type == "string":
             return self._generate_string(schema, field_name)
         elif schema_type == "integer":
@@ -860,6 +1116,13 @@ class DataGenerator:
         Podporuje format (email, date, uri, uuid, password), minLength, maxLength,
         a pattern. Pokud je field_name zadán, používá kontextové generování.
 
+        Priorita generování:
+        1. Examples (nejvyšší priorita)
+        2. Format (explicitní definice typu)
+        3. Pattern (před kontextovou logikou - explicitní definice patternu)
+        4. Kontextová logika (field_name matching - pouze když NENÍ pattern)
+        5. Generování obecného textu (poslední fallback)
+
         Args:
             prop_schema: JSON Schema pro string vlastnost.
             field_name: Název pole pro kontextové generování.
@@ -874,15 +1137,12 @@ class DataGenerator:
             >>> '@' in result
             True
         """
-        # 1. Examples priorita
-        if value := self._get_examples_value(prop_schema):
-            return value
+        # 1. Examples priorita (zachovat - nejvyšší priorita)
+        has_example, example_value = self._get_examples_value(prop_schema)
+        if has_example:
+            return example_value
 
-        # 2. Kontextová logika (pokud je field_name zadán)
-        if field_name and (value := self._get_context_value(field_name, prop_schema)):
-            return value
-
-        # 3. Získat formát
+        # 2. Format (zachovat - explicitní definice typu)
         string_format = prop_schema.get("format")
 
         # Generování podle formátu
@@ -912,6 +1172,22 @@ class DataGenerator:
         elif string_format == "phone":
             return self.fake.phone_number()
 
+        # 3. Pattern matching (NOVĚ - PŘED kontextovou logikou!)
+        # Pokud je explicitně definován pattern, použít ho místo kontextové logiky
+        pattern = prop_schema.get("pattern")
+        if pattern:
+            min_length = prop_schema.get("minLength", 1)
+            max_length = prop_schema.get("maxLength", min_length + 50)
+            logger.debug(
+                f"Pattern found, using rstr generation (skipping context logic): {pattern}"
+            )
+            return self._generate_by_pattern(pattern, min_length, max_length)
+
+        # 4. Kontextová logika (POUŽIT POUZE KDYŽ NENÍ pattern)
+        if field_name and (value := self._get_context_value(field_name, prop_schema)):
+            return value
+
+        # 5. Generování obecného textu (poslední fallback)
         # Omezení délky
         min_length = prop_schema.get("minLength", 1)
         max_length = prop_schema.get("maxLength", min_length + 50)
@@ -919,7 +1195,7 @@ class DataGenerator:
         # Generování obecného textu
         if min_length == 1 and max_length > 100:
             # Krátké slovo nebo krátká věta
-            result = self.fake.word() if self.fake.boolean() else self.fake.sentence()[: max_length]
+            result = self.fake.word() if self.fake.boolean() else self.fake.sentence()[:max_length]
         else:
             # Generování textu s přesnou délkou
             if max_length <= 20:
@@ -938,19 +1214,14 @@ class DataGenerator:
         if len(result) < min_length:
             result = result.ljust(min_length)
 
-        # Pattern matching (základní podpora)
-        pattern = prop_schema.get("pattern")
-        if pattern:
-            result = self._generate_by_pattern(pattern, min_length, max_length)
-
         return result
 
     def _generate_by_pattern(self, pattern: str, min_length: int, max_length: int) -> str:
         """
         Generuje řetězec podle regulárního výrazu.
 
-        Toto je základní implementace - podporuje jednoduché patterny.
-        Pro složité patterny vrací generovaný text odpovídající délce.
+        Tato metada se pokusí použít rstr.xeger() pro přesné generování z regex.
+        Pokud rstr není dostupný nebo selže, používá původní heuristiky.
 
         Args:
             pattern: Regulární výraz.
@@ -960,25 +1231,52 @@ class DataGenerator:
         Returns:
             Řetězec odpovídající patternu (nebo co nejpodobnější).
         """
-        # Základní patterny
-        if pattern == "^\\d+$":
-            # Pouze číslice
-            length = self.fake.random_int(min=min_length, max=max_length)
+        # 1) Try rstr.xeger for best-effort exact generation (offline)
+        if rstr is not None:
+            try:
+                candidate = rstr.xeger(pattern)
+                # Ensure min_length (repeat/pad) and max_length (trim)
+                if len(candidate) < max(1, min_length):
+                    if candidate:
+                        repeats = (min_length // len(candidate)) + 1
+                        candidate = (candidate * repeats)[:min_length]
+                    else:
+                        candidate = "0" * min_length
+                if len(candidate) > max_length:
+                    candidate = candidate[:max_length]
+                logger.debug(f"Using rstr.xeger() for pattern: {pattern}, result: {candidate[:50]}")
+                return candidate
+            except Exception as e:
+                logger.warning(
+                    f"rstr failed to generate for pattern '{pattern}': {e}. Falling back to heuristics."
+                )
+
+        # 2) Original heuristic fallback (kept for compatibility)
+        # Basic pattern examples
+        if pattern == r"^\d+$":
+            length = max(1, self.fake.random_int(min=min_length, max=max_length))
             return self.fake.numerify("#" * length)
-        elif pattern == "^[a-zA-Z]+$":
-            # Pouze písmena
+        elif pattern == r"^[a-zA-Z]+$":
             return self.fake.pystr(min_chars=min_length, max_chars=max_length)
-        elif pattern == "^[a-zA-Z0-9]+$":
-            # Alfanumerické
+        elif pattern == r"^[a-zA-Z0-9]+$":
             return self.fake.pystr(min_chars=min_length, max_chars=max_length)
-        elif "\\d" in pattern and "\\d" in pattern:
-            # Obsahuje číslice - zkusíme numerify
-            length = self.fake.random_int(min=min_length, max=max_length)
+        elif r"\d" in pattern and r"\d" in pattern:
+            length = max(1, self.fake.random_int(min=min_length, max=max_length))
             return self.fake.numerify("X" * length)
         else:
-            # Pro složité patterny vracíme obecný text
-            logger.warning(f"Složitý pattern, vracím obecný text: {pattern}")
-            return self.fake.pystr(min_chars=min_length, max_chars=max_length)
+            logger.warning(
+                f"Složitý pattern nebo rstr nedostupné, vracím obecný text pro pattern: {pattern}"
+            )
+            # Fallback: generate text and trim/pad to length constraints
+            if max_length <= 20:
+                result = self.fake.word()
+                while len(result) < min_length:
+                    result += self.fake.word()
+            else:
+                result = self.fake.text(max_nb_chars=max_length)
+                while len(result) < min_length:
+                    result += " " + self.fake.word()
+            return result[:max_length]
 
     def _generate_integer(self, prop_schema: Dict[str, Any]) -> int:
         """
@@ -1000,8 +1298,9 @@ class DataGenerator:
             True
         """
         # Examples priorita
-        if value := self._get_examples_value(prop_schema):
-            return value
+        has_example, example_value = self._get_examples_value(prop_schema)
+        if has_example:
+            return example_value
 
         minimum = prop_schema.get("minimum", -1000000)
         maximum = prop_schema.get("maximum", 1000000)
@@ -1036,8 +1335,9 @@ class DataGenerator:
             True
         """
         # Examples priorita
-        if value := self._get_examples_value(prop_schema):
-            return value
+        has_example, example_value = self._get_examples_value(prop_schema)
+        if has_example:
+            return example_value
 
         minimum = prop_schema.get("minimum", 0.0)
         maximum = prop_schema.get("maximum", 1000.0)
@@ -1061,8 +1361,9 @@ class DataGenerator:
             True
         """
         # Examples priorita
-        if value := self._get_examples_value(prop_schema):
-            return value
+        has_example, example_value = self._get_examples_value(prop_schema)
+        if has_example:
+            return example_value
 
         return self.fake.pybool()
 
@@ -1094,6 +1395,15 @@ class DataGenerator:
         min_items = prop_schema.get("minItems", 1)
         max_items = prop_schema.get("maxItems", min_items + 5)
 
+        # Pro testovací data zajistit alespoň 1 položku (pokud minItems=0)
+        # Prázdná pole neposkytují hodnotu pro testování
+        if min_items == 0:
+            min_items = 1
+
+        # Zajistit min <= max
+        if min_items > max_items:
+            max_items = min_items
+
         # Generovat počet prvků
         num_items = self.fake.random_int(min=min_items, max=max_items)
 
@@ -1105,7 +1415,11 @@ class DataGenerator:
         return result
 
     def _generate_array_with_context(
-        self, prop_schema: Dict[str, Any], field_name: str = None, target: str = "api", use_ai: bool = False
+        self,
+        prop_schema: Dict[str, Any],
+        field_name: str = None,
+        target: str = "api",
+        use_ai: bool = False,
     ) -> list:
         """
         Generuje pole podle JSON Schema s kontextovým názvem pole.
@@ -1145,7 +1459,18 @@ class DataGenerator:
 
         # Speciální logika pro tags - omezit max_items
         if field_name and field_name.lower() in ["tags", "tag"]:
-            default_tags = ["vip", "urgent", "normal", "low", "bike", "car", "fragile_ok", "fast", "priority", "standard"]
+            default_tags = [
+                "vip",
+                "urgent",
+                "normal",
+                "low",
+                "bike",
+                "car",
+                "fragile_ok",
+                "fast",
+                "priority",
+                "standard",
+            ]
 
             # 1. Zkusit example/examples na úrovni array (OpenAPI styl)
             array_examples = None
@@ -1158,19 +1483,44 @@ class DataGenerator:
                 if isinstance(example, list):
                     array_examples = example
 
-            # 2. Použít nalezené example/examples, nebo items examples, nebo default
-            if array_examples:
-                items_schema = items_schema.copy()
-                items_schema["examples"] = array_examples
-                max_items = min(max_items, len(array_examples))
+            # 2. Priority chain: items.enum > items.examples > items.example > array_examples > array_example > default
+            if "enum" in items_schema:
+                # enum bude zpracován v _generate_with_context, není třeba override
+                logger.debug(f"[tags] Using items.enum: {items_schema['enum']}")
+                pass
             elif "examples" in items_schema:
                 tags = items_schema["examples"]
                 max_items = min(max_items, len(tags))
+                logger.debug(f"[tags] Using items.examples: {tags}")
+            elif "example" in items_schema:
+                items_example = items_schema["example"]
+                logger.debug(
+                    f"[tags] Found items.example: {items_example} (type: {type(items_example).__name__})"
+                )
+                if isinstance(items_example, list):
+                    if len(items_example) == 0:
+                        logger.debug("[tags] Empty array example - returning []")
+                        return []  # Prázdné pole - respektovat
+                    items_schema = items_schema.copy()
+                    items_schema["examples"] = items_example
+                    max_items = min(max_items, len(items_example))
+                    logger.debug(f"[tags] Using items.example as examples: {items_example}")
+                # Single value - nechá na _generate_with_context
+            elif array_examples is not None:
+                # array_examples může být i prázdné pole []
+                if isinstance(array_examples, list) and len(array_examples) == 0:
+                    logger.debug("[tags] Empty array-level example - returning []")
+                    return []
+                items_schema = items_schema.copy()
+                items_schema["examples"] = array_examples
+                max_items = min(max_items, len(array_examples))
+                logger.debug(f"[tags] Using array-level examples: {array_examples}")
             else:
-                # Jinak omez na 5 a použij default tagy
+                # Fallback na default tags (pouze když nic není specifikováno)
                 max_items = min(max_items, 5)
                 items_schema = items_schema.copy()
                 items_schema["examples"] = default_tags
+                logger.debug(f"[tags] No constraints found - using default tags: {default_tags}")
 
         # Znovu zajistit min <= max (po examples handling, který může snížit max_items)
         if min_items > max_items:
@@ -1212,8 +1562,17 @@ class DataGenerator:
         # pro splnění minItems, ale jinak se je snažíme odstranit
         if field_name and not prop_schema.get("uniqueItems", False):
             field_lower = field_name.lower()
-            tag_indicators = ["tags", "tag", "categories", "category", "kategorie", "required_tags",
-                             "optional_tags", "all_tags", "allowed_tags"]
+            tag_indicators = [
+                "tags",
+                "tag",
+                "categories",
+                "category",
+                "kategorie",
+                "required_tags",
+                "optional_tags",
+                "all_tags",
+                "allowed_tags",
+            ]
 
             if any(indicator in field_lower for indicator in tag_indicators):
                 # Zkusit odstranit duplicity, ale zachovat min_items
@@ -1405,3 +1764,90 @@ class DataGenerator:
             return True
 
         return False
+
+    def generate_explore(self, schema: Dict[str, Any], amount: int = 100) -> List[Any]:
+        """
+        Generuje mnoho variant (edge-cases) pro property-based/fuzz testing.
+
+        Tato metoda používá knihovnu hypothesis-jsonschema pro generování
+        různých variant dat které pokrývají edge-cases a boundary conditions.
+
+        Args:
+            schema: JSON Schema slovník.
+            amount: Počet variant k vygenerování. Default: 100.
+
+        Returns:
+            Seznam vygenerovaných variant (vždy seznam, i když amount=1).
+
+        Raises:
+            TalosForgeException: Pokud hypothesis-jsonschema není dostupná.
+
+        Example:
+            >>> generator = DataGenerator()
+            >>> schema = {"type": "string", "minLength": 5, "maxLength": 10}
+            >>> variants = generator.generate_explore(schema, amount=10)
+            >>> print(len(variants))
+            10
+        """
+        if from_schema is None:
+            logger.warning(
+                "hypothesis-jsonschema není dostupná, " "explore mode používá standardní generování"
+            )
+            # Fallback na standardní generování
+            results = []
+            for _ in range(amount):
+                results.append(self.generate(schema))
+            return results
+
+        try:
+            logger.info(f"Explore mode: generuji {amount} variant pomocí hypothesis-jsonschema")
+
+            # Vytvoříme strategii ze schema
+            strategy = from_schema(schema)
+
+            # Generování N různých variant pomocí strategy.example()
+            results = []
+            seen = set()  # Pro deduplikaci
+
+            # Pro explore mode použijeme různé random seeds
+            import random
+            import time
+
+            for i in range(amount):
+                try:
+                    # Nastavíme různý seed pro každou iteraci
+                    # Použijeme čas i index pro větší náhodnost
+                    seed = int(time.time() * 1000000) + i
+                    random.seed(seed)
+
+                    # Vygenerujeme jednu hodnotu pomocí strategy.example()
+                    # Tato metoda by měla generovat náhodné hodnoty
+                    from hypothesis import settings as h_settings
+                    from hypothesis.core import randomness
+
+                    # Použijeme randomness prostředí pro každou iteraci
+                    with randomness.user_random():
+                        value = strategy.example()
+
+                    # Deduplikace pomocí JSON serializace
+                    value_json = json.dumps(value, sort_keys=True, default=str)
+                    if value_json not in seen:
+                        seen.add(value_json)
+                        results.append(value)
+                        logger.debug(f"Explore variant #{i+1}: {str(value)[:50]}...")
+                except Exception as e:
+                    logger.debug(f"Nepodařilo se vygenerovat variantu #{i+1}: {e}")
+                    # Fallback na standardní generování
+                    fallback_value = self.generate(schema)
+                    results.append(fallback_value)
+
+            logger.info(f"Vygenerováno {len(results)} unikátních variant (z {amount} požadovaných)")
+            return results
+
+        except Exception as e:
+            logger.warning(f"Explore mode selhal: {e}. Používám standardní generování.")
+            # Fallback na standardní generování
+            results = []
+            for _ in range(amount):
+                results.append(self.generate(schema))
+            return results

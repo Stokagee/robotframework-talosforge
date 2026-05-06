@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 20,
+      "description": "Username for testing"
+    },
+    "age": {
+      "type": "integer",
+      "minimum": 18,
+      "maximum": 100,
+      "description": "User age"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 10.0,
+      "description": "Test score"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "User tags"
+    },
+    "user": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address"
+        }
+      },
+      "required": ["name"]
+    }
+  },
+  "required": ["username"]
+}

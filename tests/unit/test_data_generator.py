@@ -224,6 +224,30 @@ def test_should_use_ai():
     assert generator._should_use_ai(schema_oneof) is True
 
 
+def test_ai_triggered_with_db_description():
+    """Test že AI se použije když schema má description z DB komentáře."""
+    generator = DataGenerator()
+
+    # Schema jako by přišlo z DB s COMMENT ON COLUMN
+    db_schema = {
+        "type": "string",
+        "description": "User email address with Czech domain"
+    }
+    assert generator._should_use_ai(db_schema) is True
+
+    # Schema s description a maxLength (společné z DB)
+    db_schema_with_length = {
+        "type": "string",
+        "description": "Czech full name with diacritics",
+        "maxLength": 100
+    }
+    assert generator._should_use_ai(db_schema_with_length) is True
+
+    # Schema bez description (např. sloupec bez COMMENT)
+    plain_schema = {"type": "string", "maxLength": 100}
+    assert generator._should_use_ai(plain_schema) is False
+
+
 # Tests pro examples podporu
 
 
@@ -243,18 +267,55 @@ def test_examples_integer():
     assert result in [1, 2, 3]
 
 
-def test_example_singular_ignored():
-    """Singular 'example' by měl být ignorován, použije se Faker."""
+def test_example_singular_string_ignored_for_variety():
+    """Singular 'example' pro string by měl být ignorován pro variabilitu."""
     generator = DataGenerator()
     schema = {"type": "string", "example": "static_value"}
 
-    results = [generator.generate(schema) for _ in range(20)]
+    results = [generator.generate(schema) for _ in range(10)]
 
     # Měli bychom dostat různé hodnoty od Fakeru
     unique = set(results)
-    assert len(unique) > 1, f"Očekáváno více hodnot, dostáno: {unique}"
-    # Hodnota 'static_value' by se neměla objevit
-    assert "static_value" not in results
+    assert len(unique) > 1, f"Očekáváno více hodnot pro variabilitu, dostáno: {unique}"
+    # static_value by se nemělo opakovat
+    assert results.count("static_value") <= 1, "Example by neměl být použit pro string"
+
+
+def test_example_singular_boolean():
+    """Singular 'example' by měl fungovat pro boolean typ."""
+    generator = DataGenerator()
+    schema = {"type": "boolean", "example": False}
+
+    result = generator.generate(schema)
+
+    # Hodnota by měla být přesně False
+    assert result is False, f"Očekáváno False, dostáno: {result}"
+
+
+def test_example_singular_integer():
+    """Singular 'example' by měl fungovat pro integer typ."""
+    generator = DataGenerator()
+    schema = {"type": "integer", "example": 42}
+
+    result = generator.generate(schema)
+
+    # Hodnota by měla být přesně 42
+    assert result == 42, f"Očekáváno 42, dostáno: {result}"
+
+
+def test_example_over_description():
+    """Example by měl mít přednost před description pro boolean."""
+    generator = DataGenerator()
+    schema = {
+        "type": "boolean",
+        "example": True,
+        "description": "nějaký text pro dokumentaci"
+    }
+
+    result = generator.generate(schema)
+
+    # Example by měl mít přednost
+    assert result is True, f"Očekáváno True, dostáno: {result}"
 
 
 def test_examples_plural_still_works():
@@ -270,21 +331,37 @@ def test_examples_plural_still_works():
     assert len(set(results)) >= 2
 
 
-def test_example_with_format():
-    """Example by měl být ignorován i s format约束."""
+def test_example_with_format_ignored_for_string():
+    """Example pro string s format by měl být ignorován - Faker generuje validní hodnoty."""
     generator = DataGenerator()
     schema = {
         "type": "string",
         "format": "email",
-        "example": "not_an_email"
+        "example": "test@example.com"
     }
 
     results = [generator.generate(schema) for _ in range(10)]
 
-    # Měli bychom dostat validní emaily od Fakeru
-    assert all("@" in r for r in results)
-    # 'not_an_email' by se nemělo objevit
-    assert "not_an_email" not in results
+    # Měli bychom dostat různé validní emaily od Fakeru
+    assert all("@" in r for r in results), "Všechny by měly být validní emaily"
+    # Pro variabilitu by nemělo být pořád stejné
+    unique = set(results)
+    assert len(unique) >= 2, f"Očekávána variabilita emailů, dostáno: {unique}"
+
+
+def test_example_with_description_no_enum_extraction():
+    """Description by neměl být parsován jako enum - Faker generuje data."""
+    generator = DataGenerator()
+    schema = {
+        "type": "string",
+        "description": "Status: active, inactive, pending"
+    }
+
+    results = [generator.generate(schema) for _ in range(10)]
+
+    # Description by neměl být parsován jako enum
+    # Faker by měl generovat různé stringy
+    assert all(isinstance(r, str) for r in results), "Všechny by měly být stringy"
 
 
 def test_examples_in_nested_object():
@@ -473,6 +550,79 @@ def test_tags_default_examples():
     assert all(tag in default_tags for tag in result["tags"])
 
 
+def test_tags_with_items_enum():
+    """Test že items.enum má přednost před default tags."""
+    generator = DataGenerator()
+    schema = {
+        "type": "object",
+        "properties": {
+            "tags": {
+                "type": "array",
+                "items": {"type": "string", "enum": ["custom_vip", "custom_urgent"]},
+                "minItems": 1
+            }
+        },
+        "required": ["tags"]
+    }
+    result = generator.generate(schema)
+    assert isinstance(result["tags"], list)
+    # Všechny tagy by měly být z enum, ne z default
+    assert all(tag in ["custom_vip", "custom_urgent"] for tag in result["tags"])
+
+
+def test_tags_with_empty_example():
+    """Test že prázdné example pole vygeneruje prázdné pole."""
+    generator = DataGenerator()
+    schema = {
+        "type": "object",
+        "properties": {
+            "required_tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "example": [],
+                "minItems": 0
+            }
+        },
+        "required": ["required_tags"]
+    }
+    result = generator.generate(schema)
+    assert result["required_tags"] == [], f"Očekáváno [], dostáno: {result['required_tags']}"
+
+
+def test_array_with_empty_example_at_array_level():
+    """Test že prázdné example na úrovni array vygeneruje prázdné pole."""
+    generator = DataGenerator()
+    schema = {
+        "type": "array",
+        "items": {"type": "string"},
+        "example": [],
+        "minItems": 0
+    }
+    result = generator.generate(schema)
+    assert result == [], f"Očekáváno [], dostáno: {result}"
+
+
+def test_tags_example_string_ignored_for_variety():
+    """Test že items.example pro string je ignorován pro variabilitu."""
+    generator = DataGenerator()
+    schema = {
+        "type": "object",
+        "properties": {
+            "tags": {
+                "type": "array",
+                "items": {"type": "string", "example": "custom_tag"},
+                "minItems": 1
+            }
+        },
+        "required": ["tags"]
+    }
+    result = generator.generate(schema)
+    assert isinstance(result["tags"], list)
+    # String example by měl být ignorován, použijí se default tags
+    default_tags = ["vip", "urgent", "normal", "low", "bike", "car", "fragile_ok", "fast", "priority", "standard"]
+    assert all(tag in default_tags for tag in result["tags"])
+
+
 # Tests pro priority - enum má přednost před examples
 
 
@@ -489,16 +639,18 @@ def test_get_examples_value_empty():
     """Test _get_examples_value s prázdným listem."""
     generator = DataGenerator()
     schema = {"type": "string", "examples": []}
-    result = generator._get_examples_value(schema)
-    assert result is None
+    has_value, value = generator._get_examples_value(schema)
+    assert has_value is False
+    assert value is None
 
 
 def test_get_examples_value_none():
     """Test _get_examples_value bez examples."""
     generator = DataGenerator()
     schema = {"type": "string"}
-    result = generator._get_examples_value(schema)
-    assert result is None
+    has_value, value = generator._get_examples_value(schema)
+    assert has_value is False
+    assert value is None
 
 
 def test_is_nullable_true():

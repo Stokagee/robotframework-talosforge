@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "TalosForge"
-version = "0.4.0"
+version = "0.5.0"
 description = "Schema-driven test data generator for Robot Framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,10 +29,18 @@ dependencies = [
     "openai>=1.0",
     "rapidfuzz>=3.0.0",
     "openapi-schema-validator>=0.7.0",
+    "colorama>=0.4.6",
 ]
 
 [project.optional-dependencies]
 ai = ["openai>=1.0"]
+db = ["psycopg2-binary>=2.9.0"]
+extras = [
+    "rstr>=2.0.0",                    # A) regex generování
+    "prance>=0.24.0",                 # B) externí $ref resolving
+    "hypothesis-jsonschema",          # C) explore režim pro property-based testing
+    "openapi-spec-validator>=0.7.0",  # Validation backend pro prance
+]
 dev = [
     "pytest>=7.0",
     "pytest-mock>=3.10",

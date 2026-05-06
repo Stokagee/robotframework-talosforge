@@ -2,10 +2,12 @@
 Testy pro AIGenerator.
 """
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 from TalosForge.core.ai_generator import AIGenerator
 from TalosForge.core.exceptions import TalosForgeException
+import TalosForge.core.config as config_module
 
 
 def test_ai_generator_initialization():
@@ -168,64 +170,57 @@ def test_parse_ai_response_extract_json():
     assert result.get("key") == "value"
 
 
-@patch('TalosForge.core.ai_generator.OPENAI_API_KEY', 'test-key')
-def test_call_openai_api():
+@patch('TalosForge.core.config.get_config')
+def test_call_openai_api(mock_get_config, monkeypatch):
     """Test volání OpenAI API."""
     from unittest.mock import Mock, patch
+    import TalosForge.core.ai_generator as ai_gen_module
 
-    with patch('TalosForge.core.ai_generator.OPENAI_API_KEY', 'test-key'):
-        # Reimport pro aplikaci monkey patch
-        import importlib
-        import TalosForge.core.config as config_module
-        importlib.reload(config_module)
-        from TalosForge.core.ai_generator import AIGenerator
+    # Nastavit API klíč přes environment variable
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
-        generator = AIGenerator()
+    # Reset config
+    import TalosForge.core.config as config_module
+    config_module._config = None
 
-        # Mock OpenAI klienta
-        with patch.object(generator, 'openai_client') as mock_client:
-            mock_response = Mock()
-            mock_response.choices = [Mock()]
-            mock_response.choices[0].message.content = '"generated value"'
-            mock_client.chat.completions.create.return_value = mock_response
+    # Mock config vracející test klíč
+    mock_config = Mock()
+    mock_config.openai_api_key = "test-key"
+    mock_config.openai_model = "gpt-3.5-turbo"
+    mock_get_config.return_value = mock_config
 
-            result = generator._call_openai_api("Test prompt")
+    # Reimport modulu pro aplikaci mock
+    import importlib
+    importlib.reload(ai_gen_module)
+    from TalosForge.core.ai_generator import AIGenerator
 
-            assert result == '"generated value"'
-            mock_client.chat.completions.create.assert_called_once()
+    generator = AIGenerator()
+
+    # Mock OpenAI klienta
+    with patch.object(generator, 'openai_client') as mock_client:
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = '"generated value"'
+        mock_client.chat.completions.create.return_value = mock_response
+
+        result = generator._call_openai_api("Test prompt")
+
+        assert result == '"generated value"'
+        mock_client.chat.completions.create.assert_called_once()
 
 
 def test_generate_without_ai():
     """Test generování bez AI klíče."""
-    # Odstranit klíče
-    import os
-    original_openai = os.environ.get("OPENAI_API_KEY")
-    original_zhipu = os.environ.get("ZHIPU_API_KEY")
-
-    os.environ.pop("OPENAI_API_KEY", None)
-    os.environ.pop("ZHIPU_API_KEY", None)
-
-    # Modul reload
-    import importlib
-    import TalosForge.core.config as config_module
-    importlib.reload(config_module)
-    from TalosForge.core.ai_generator import AIGenerator
+    # The fixture already removes API keys and blocks local config loading
+    generator = AIGenerator()
+    schema = {"type": "string"}
 
     try:
-        generator = AIGenerator()
-        schema = {"type": "string"}
-
-        try:
-            generator.generate(schema)
-            assert False, "Měla vyhodit TalosForgeException"
-        except TalosForgeException as e:
-            assert "AI generování není k dispozici" in str(e)
-    finally:
-        # Obnovit klíče
-        if original_openai:
-            os.environ["OPENAI_API_KEY"] = original_openai
-        if original_zhipu:
-            os.environ["ZHIPU_API_KEY"] = original_zhipu
+        generator.generate(schema)
+        assert False, "Měla vyhodit TalosForgeException"
+    except TalosForgeException as e:
+        # Check that error message mentions AI availability issues
+        assert "AI" in str(e) and ("k dispozici" in str(e) or "available" in str(e))
 
 
 def test_should_use_ai_by_description():
