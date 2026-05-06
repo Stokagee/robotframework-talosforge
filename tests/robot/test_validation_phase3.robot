@@ -1,27 +1,13 @@
 *** Settings ***
 Library     TalosForge
 Library     Collections
-Library     Process
+Resource    resources${/}mock_server.resource
 Suite Setup       Start Mock OpenAPI Server
 Suite Teardown    Stop Mock OpenAPI Server
 
 *** Variables ***
 ${MOCK_PORT}        18080
 ${MOCK_URL}         http://127.0.0.1:${MOCK_PORT}/test_api_responses.yaml
-
-*** Keywords ***
-Start Mock OpenAPI Server
-    [Documentation]    Spustí python -m http.server v tests/fixtures adresáři.
-    ...    Servíruje YAML fixture přes localhost na ${MOCK_PORT}.
-    ${fixtures_dir}=    Set Variable    ${CURDIR}${/}..${/}fixtures
-    ${process}=    Start Process    python    -m    http.server    ${MOCK_PORT}
-    ...    cwd=${fixtures_dir}    stdout=${TEMPDIR}${/}mock_server.log    stderr=STDOUT
-    Set Suite Variable    ${MOCK_PROCESS}    ${process}
-    # Krátké čekání, aby se server stihl bindnout na port
-    Sleep    1s
-
-Stop Mock OpenAPI Server
-    Terminate Process    ${MOCK_PROCESS}    kill=True
 
 *** Test Cases ***
 Validate Against URL Spec Passes
