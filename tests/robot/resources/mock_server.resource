@@ -14,12 +14,16 @@ Documentation     Shared keywords for the local Mock OpenAPI server used by URL-
 
 Library     Process
 
+*** Variables ***
+${MOCK_PORT}    18080
+${MOCK_BASE}    http://127.0.0.1:${MOCK_PORT}
+
 *** Keywords ***
 Start Mock OpenAPI Server
     [Documentation]    Spustí python -m http.server v tests/fixtures adresáři.
     ...                Servíruje YAML fixture přes localhost na zadaném portu.
-    [Arguments]    ${port}=18080
-    ${fixtures_dir}=    Set Variable    ${CURDIR}${/}..${/}..${/}fixtures
+    [Arguments]    ${port}=${MOCK_PORT}
+    VAR    ${fixtures_dir}    ${CURDIR}${/}..${/}..${/}fixtures
     ${process}=    Start Process    python    -m    http.server    ${port}
     ...    cwd=${fixtures_dir}    stdout=${TEMPDIR}${/}mock_server_${port}.log    stderr=STDOUT
     Set Suite Variable    ${MOCK_PROCESS}    ${process}

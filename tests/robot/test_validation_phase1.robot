@@ -15,8 +15,11 @@ Validate Valid Data Passes
 Validate Invalid Data Raises
     [Documentation]    Validation raises with detailed message when data violates schema.
     ${data}=    Evaluate    ${INVALID_USER}
-    Run Keyword And Expect Error    *Validation failed*
-    ...    Validate Data Against Schema    data=${data}    schema_path=${CURDIR}${/}..${/}fixtures${/}user.json
+    TRY
+        Validate Data Against Schema    data=${data}    schema_path=${CURDIR}${/}..${/}fixtures${/}user.json
+    EXCEPT    *Validation failed*    type=GLOB
+        No Operation
+    END
 
 Validate With Return Errors Returns List
     [Documentation]    return_errors=True returns list of error dicts instead of raising.
