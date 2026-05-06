@@ -4,21 +4,115 @@ Všechny významné změny projektu TalosForge budou dokumentovány v tomto soub
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.5.0] - 2026-05-06
+
+Sloučení (port) features z dříve odděleného Artima 0.5.0 forku do hlavní
+větve. Verze tedy obsahuje BOTH (a) response-code fallback / validation
+keyword z 0.4.0 main, (b) DB integraci, prance, rstr, explore mode
+a další parametry z 0.5.0 forku.
 
 ### Přidáno
-- **Response code fallback ve `Validate Data Against Schema`**: numeric → range → default
-  ([issue #2](https://github.com/Stokagee/robotframework-talosforge/issues/2))
-  - `SchemaLoader.extract_response_schemas()` nyní vrací i range klíče
-    (`1XX`–`5XX`, normalizované na uppercase) a `default`
-  - Nový helper `SchemaLoader.resolve_response_schema(schemas, response_code)`
-    aplikuje fallback (exact → bucket → default)
-  - Validace selže pouze tehdy, když nesedí ani jedna ze tří úrovní
 
-### Změněno
-- Návratový typ `extract_response_schemas` z `Dict[str, Dict[int, …]]` na
-  `Dict[str, Dict[int | str, …]]` — numerické kódy zůstávají `int`,
-  range a default jsou `str`
+**Database mode (`Load Schema` + `target=db`):**
+- **`TalosForge/db/`** package: `BaseSchemaReader`, `PostgresSchemaReader`
+  s registrem `DB_READERS` (graceful fallback pokud psycopg2 chybí)
+- Nové parametry v `Load Schema`: `db_module`, `db_name`, `db_host`,
+  `db_port`, `db_user`, `db_password`, `db_schema`, `db_table`,
+  `db_exclude_columns` (čárkou oddělené)
+- Nový mode `target="db"` v `Generate Data From Schema` — vrací SQL
+  VALUES řetězec pro `DatabaseLibrary` (např. `"'Jan', 'Novák', 25"`)
+
+**Externí $ref resolving (prance):**
+- Nový parametr `allow_external_refs` v `Load Schema` a v
+  `SchemaLoader.__init__()`
+- `SchemaLoader.load_openapi_spec()` a `load_openapi_spec_from_url()`
+  preferují `prance.ResolvingParser` při zapnutí, s graceful fallbackem
+  na základní loader
+
+**Property-based / explore mode (hypothesis-jsonschema):**
+- Nový parametr `explore` v `Generate Data From Schema`
+- Nová metoda `DataGenerator.generate_explore(schema, amount)` —
+  generuje edge-case varianty pro fuzz testing, vždy vrací seznam
+- Automatický fallback na standardní generování pokud
+  `hypothesis-jsonschema` chybí
+
+**Regex generování (rstr):**
+- `_generate_by_pattern()` nyní primárně používá `rstr.xeger()` pro
+  přesné generování z regulárních výrazů s podporou
+  `minLength`/`maxLength` omezení; fallback na heuristiky pokud rstr
+  není k dispozici
+- Změna priority generování stringů: Examples > Format > **Pattern** >
+  Kontext > Obecný text (pattern má teď přednost před kontextovou
+  logikou — pole jako `code` se schématem `^[A-Z]{2}\d{4}$` bude
+  korektně odpovídat patternu)
+
+**Konfigurace:**
+- Refactor `core/config.py` na YAML-based `Config` třídu s
+  singletonem (`init_config`, `get_config`, `_update_globals`)
+- Hledání configu v `talosforge.yml` nebo `~/.talosforge/config.yml`,
+  fallback na env vars a defaults
+- Striktní AI provider mode (`provider: openai|zhipu|auto`)
+- Nové konfigurovatelné: `gps_region` (CZ/EU/US/global), `cache.ttl`,
+  `cache.enabled`
+- `TalosForge.__init__()` přijímá volitelný `config_path`
+
+**Další parametry v `Generate Data From Schema`:**
+- `convert_decimals: bool = True` — automatický převod `Decimal` →
+  `float` pro JSON kompatibilitu (Faker.latitude/longitude vrací
+  `Decimal`)
+- `exclude_dictionary: Optional[str]` — čárkou oddělený seznam JSON
+  cest k vyloučení z výstupu, podporuje tečkovou notaci pro vnořená
+  pole (např. `"id,created_at,user.id"`)
+
+**Drobnosti v generátoru:**
+- `_generate_bounded_coordinate()` — generování GPS souřadnic v rámci
+  vybrané regionální obálky
+- `_get_examples_value()` nyní vrací tuple `(has_value, value)` pro
+  rozlišení "žádný example" vs. "example je `None`/`False`/`[]`"
+- AI prompty obsahují locale instrukci (cs_CZ/en_US/jiné) podle
+  configu — generovaná data odpovídají požadovanému jazyku
+
+**Loader rozšíření:**
+- `_is_flat_endpoint_format()` + `_extract_flat_endpoint_schemas()` —
+  podpora vlastního flat formátu specifikace s klíči jako
+  `"POST /api/v1/users"` přímo na root úrovni
+- `_unwrap_json_schema_if_wrapped()` — automatické rozbalení JSON
+  Schema z REST API responses typu `{"name": "...", "schema": {...}}`,
+  `{"data": {...}}`, `{"result": {...}}`
+
+**Logování:**
+- Nový modul `TalosForge/utils/logger.py` s barevným výstupem
+  (colorama) — `log_warning`, `log_error` a TTY detekce
+
+### Závislosti
+
+Přidáno do `dependencies`:
+- `colorama>=0.4.6`
+
+Nové optional extras groups:
+- `db = ["psycopg2-binary>=2.9.0"]` — `pip install -e ".[db]"`
+- `extras = ["rstr>=2.0.0", "prance>=0.24.0", "hypothesis-jsonschema",
+  "openapi-spec-validator>=0.7.0"]` — `pip install -e ".[extras]"`
+
+### Tests
+- 217 unit testů pass (z toho 30 nových: db, logger, config,
+  decimal_conversion, exclude_dictionary, flat_format, gps_region,
+  postgres_schema_reader, atd.)
+- 6 nových RF testů: `test_db_integration.robot`, `test_explore_mode.robot`,
+  `test_external_refs.robot`, `test_rstr_integration.robot`,
+  `test_url_schema.robot`, `test_config.robot`
+- `tests/conftest.py` přidán s `reset_global_state` autouse fixture
+  (resetuje config singleton + odstraňuje env vars před každým testem)
+
+### Zachováno z 0.4.0 main
+- `Validate Data Against Schema` keyword (Phase 1/2/3 dispatch)
+- Response-code fallback (numeric → range → default), tj.
+  `extract_response_schemas` vrací `Dict[str, Dict[int|str, schema]]`
+  s range bucky `1XX`–`5XX` a `default`
+- `SchemaLoader.resolve_response_schema()` a `build_registry()`
+- `validation/` package (SchemaValidator, error formatter)
+- UniversalFieldParser (token + RapidFuzz fuzzy matching) — Artima fork
+  obsahoval shodnou verzi, žádný regression
 
 ## [0.4.0] - 2026-05-05
 
