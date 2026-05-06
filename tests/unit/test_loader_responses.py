@@ -270,24 +270,65 @@ class TestExtractResponseSchemasStatusCodes:
     def test_numeric_string_codes_parsed_as_int(self, loader):
         result = loader.extract_response_schemas(SPEC_SINGLE_201)
         codes = list(result["POST /users"].keys())
-        assert all(isinstance(c, int) for c in codes)
         assert codes == [201]
+        assert isinstance(codes[0], int)
 
-    def test_default_code_ignored(self, loader):
+    def test_default_code_included(self, loader):
         result = loader.extract_response_schemas(SPEC_DEFAULT_ONLY)
-        # Endpoint with only 'default' code has no numeric responses,
-        # so it should not appear in the result at all.
-        assert "POST /users" not in result
+        assert "POST /users" in result
+        assert "default" in result["POST /users"]
+        assert result["POST /users"]["default"]["type"] == "object"
 
-    def test_xx_range_codes_ignored(self, loader):
+    def test_xx_range_codes_included(self, loader):
         result = loader.extract_response_schemas(SPEC_RANGE_AND_NUMERIC)
         assert "POST /users" in result
         codes = result["POST /users"]
         assert 201 in codes
-        assert "2XX" not in codes
-        assert all(isinstance(c, int) for c in codes.keys())
+        assert "2XX" in codes
+        # numeric codes stay as int, range codes are upper-case strings
+        assert isinstance([k for k in codes if k == 201][0], int)
 
-    def test_non_numeric_codes_ignored(self, loader):
+    def test_lowercase_xx_normalized_to_uppercase(self, loader):
+        spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {
+                            "2xx": {
+                                "content": {
+                                    "application/json": {"schema": {"type": "object"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        result = loader.extract_response_schemas(spec)
+        assert "GET /users" in result
+        assert "2XX" in result["GET /users"]
+
+    def test_all_range_buckets_included(self, loader):
+        spec = {
+            "paths": {
+                "/r": {
+                    "get": {
+                        "responses": {
+                            code: {
+                                "content": {
+                                    "application/json": {"schema": {"type": "object"}}
+                                }
+                            }
+                            for code in ("1XX", "2XX", "3XX", "4XX", "5XX")
+                        }
+                    }
+                }
+            }
+        }
+        result = loader.extract_response_schemas(spec)
+        assert set(result["GET /r"].keys()) == {"1XX", "2XX", "3XX", "4XX", "5XX"}
+
+    def test_non_numeric_non_range_codes_ignored(self, loader):
         spec = {
             "paths": {
                 "/users": {

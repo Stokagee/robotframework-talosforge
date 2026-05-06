@@ -589,6 +589,14 @@ Musí být specifikován **právě jeden** ze zdrojů (stejně jako u ``Generate
 ``response_code`` (volitelný)
     HTTP status code, jehož response schéma se má použít pro validaci. Používá se pouze u zdrojů ``endpoint`` a ``openapi_url``.
 
+    Pořadí rozlišení (první shoda vyhrává):
+
+    1. **Přesný numerický kód** (např. ``200``, ``404``)
+    2. **Range bucket** odpovídající první číslici (``1XX``, ``2XX``, ``3XX``, ``4XX``, ``5XX``)
+    3. **``default``** response
+
+    Validace selže s "no schema for status code …" pouze tehdy, když ani jedna úroveň nesedí.
+
     *Typ:* ``int``
     *Výchozí:* ``200``
     *Příklad:* ``response_code=${201}``, ``response_code=${404}``
@@ -767,7 +775,7 @@ Strict režim platí i pro **vnořené objekty** a **komponenty dosažené přes
 
 **Důležité poznámky**
 
-* **Pouze numerické status kódy.** ``response_code=200`` nebo ``response_code=${201}``. Kódy ``default``, ``2XX``, ``4XX`` ze sekce ``responses`` se ignorují (sledováno jako issue).
+* **Numerický status kód s fallbackem.** ``response_code=${200}`` nebo ``response_code=${404}``. Pokud daný numerický kód není v ``responses`` definován, použije se range kód (``2XX``, ``4XX`` …) a poté ``default`` — viz popis parametru ``response_code`` výše.
 * **Pouze ``application/json`` content type.** Endpointy bez ``application/json`` v ``responses[*].content`` nejsou v indexu dostupné.
 * **OpenAPI 3.0 formáty.** Validátor podporuje OpenAPI 3.0 formáty navíc oproti čistému JSON Schema (``int32``, ``int64``, ``float``, ``double``, ``byte``, ``binary``).
 * **Cache pro openapi_url.** Stejná URL se v rámci instance ``TalosForge`` stáhne pouze jednou (TTL 1 hodina) — to platí napříč ``Generate Data From Schema`` i ``Validate Data Against Schema``.

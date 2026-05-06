@@ -181,7 +181,8 @@ Core moduly obsahují klíčové komponenty pro generování dat.
     * ``load_openapi_spec(spec_path)`` - Načte OpenAPI specifikaci (JSON/YAML)
     * ``extract_endpoint_schemas(spec)`` - Extrahuje schémata z requestBody
     * ``load_openapi_spec_from_url(spec_url)`` - Stáhne specifikaci z URL
-    * ``extract_response_schemas(spec)`` - *(od verze 0.4.0)* Extrahuje response schémata z OpenAPI 3.0 specifikace. Vrací slovník ``{"METHOD /path": {status_code: schema}}`` pro numerické status kódy a ``application/json`` content type.
+    * ``extract_response_schemas(spec)`` - *(od verze 0.4.0, rozšířeno v 0.4.1)* Extrahuje response schémata z OpenAPI 3.0 specifikace. Vrací slovník ``{"METHOD /path": {status_key: schema}}`` pro ``application/json`` content type. ``status_key`` je ``int`` pro numerické kódy (``200``), ``str`` pro range kódy (``"2XX"`` … ``"5XX"``, vždy uppercase) a ``"default"`` pro fallback definici.
+    * ``resolve_response_schema(schemas, response_code)`` - *(od verze 0.4.1)* Statický helper, který pro daný numerický ``response_code`` vybere schéma v pořadí: přesný numerický kód → range bucket (např. ``2XX`` pro ``200``) → ``default``. Vrací ``None``, pokud žádná úroveň nesedí.
     * ``build_registry(spec)`` - *(od verze 0.4.0)* Postaví ``referencing.Registry`` pro resolution ``$ref`` odkazů v OpenAPI specifikaci. Použito interně ``SchemaValidator``em pro validaci proti komponentám z ``components.schemas``.
 
 .. py:class:: TalosForge.utils.cache.SimpleCache

@@ -1,0 +1,68 @@
+openapi: 3.0.0
+info:
+  title: Response code fallback fixture
+  version: 1.0.0
+
+# Three endpoints exercise each level of the resolution hierarchy
+# (numeric -> 'NXX' range -> default) defined for issue #2.
+paths:
+  /exact:
+    get:
+      summary: Both numeric and range/default exist - numeric must win.
+      responses:
+        '200':
+          description: explicit
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exact]
+                properties:
+                  exact: { type: string }
+        '2XX':
+          description: range fallback (must NOT be picked when 200 is requested)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [range]
+                properties:
+                  range: { type: string }
+        default:
+          description: catch-all (must NOT be picked when 200 is requested)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fallback]
+                properties:
+                  fallback: { type: string }
+
+  /range:
+    get:
+      summary: Only a range bucket - numeric requests fall through to it.
+      responses:
+        '4XX':
+          description: any 4xx
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message]
+                properties:
+                  code: { type: integer }
+                  message: { type: string }
+
+  /default-only:
+    get:
+      summary: Only default - any numeric request falls all the way through.
+      responses:
+        default:
+          description: catch-all
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }

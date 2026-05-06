@@ -441,12 +441,16 @@ class TalosForge:
             raise TalosForgeException(
                 f"Endpoint '{key}' not found in {source_label}"
             )
-        if response_code not in response_schemas[key]:
-            available = sorted(response_schemas[key].keys())
+        # Resolution order: exact numeric → 'NXX' range bucket → 'default'.
+        schema = self.schema_loader.resolve_response_schema(
+            response_schemas[key], response_code
+        )
+        if schema is None:
+            available = sorted(response_schemas[key].keys(), key=str)
             raise TalosForgeException(
-                f"No schema for status code {response_code}. Available: {available}"
+                f"No schema for status code {response_code} (no exact, range "
+                f"or default match). Available: {available}"
             )
-        schema = response_schemas[key][response_code]
         registry = self.schema_loader.build_registry(spec)
         validator = SchemaValidator(schema, registry=registry)
         return validator.validate(data, return_errors=return_errors)
