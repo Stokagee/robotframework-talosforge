@@ -35,7 +35,7 @@ Hlavní výhody
 * **Jeden zdroj pravdy** - Testovací data definujete ve schématu, ne v kódu
 * **Hybridní přístup** - Faker pro rychlost, AI pro složité případy
 * **Univerzální** - Kompatibilní s RequestsLibrary, Browser, DatabaseLibrary
-* **Jednoduché API** - Pouze dva keywords: ``Load Schema`` a ``Generate Data From Schema``
+* **Jednoduché API** - Tři keywords: ``Load Schema``, ``Generate Data From Schema`` a ``Validate Data Against Schema``
 
 Rychlý start
 ------------
@@ -82,7 +82,7 @@ Obsah dokumentace
 -----------------
 
 * **Instalace a nastavení** - jak nainstalovat a nastavit TalosForge
-* **Keywords** - detailní popis ``Load Schema`` a ``Generate Data From Schema``
+* **Keywords** - detailní popis ``Load Schema``, ``Generate Data From Schema`` a ``Validate Data Against Schema``
 * **AI Integrace** - kompletní průvodce AI generováním (OpenAI, Zhipu)
 * **Konfigurace** - reference environment variables a nastavení
 * **API Reference** - kompletní dokumentace tříd a metod
@@ -101,7 +101,7 @@ Obsah dokumentace
     faq
 
 .. IMPORTANT::
-   Nová verze 0.3.0! Pole ``example`` je nyní ignorováno. Viz :doc:`migracni_pirucka`.
+   Nová verze 0.4.0! Přidán keyword ``Validate Data Against Schema`` pro validaci dat proti JSON Schema / OpenAPI 3.0 (strict mode, $ref resolution, online URL spec). Viz :ref:`Validate Data Against Schema <keyword-validate-data-against-schema>` a :doc:`zmeny_chovani`.
 
 Indexy a vyhledávání
 ---------------------

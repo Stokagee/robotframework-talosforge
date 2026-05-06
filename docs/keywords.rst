@@ -1,7 +1,7 @@
 Keywords - Referenční příručka
 ==================================
 
-TalosForge poskytuje dva hlavní keywords pro Robot Framework. Tato kapitola obsahuje detailní popis každého keywordu včetně parametrů, příkladů použití a doporučených postupů.
+TalosForge poskytuje tři hlavní keywords pro Robot Framework. Tato kapitola obsahuje detailní popis každého keywordu včetně parametrů, příkladů použití a doporučených postupů.
 
 .. contents::
     :local:
@@ -112,7 +112,7 @@ Generuje testovací data na základě poskytnutého schématu (JSON Schema nebo 
 
 .. code-block:: robotframework
 
-    ${data}=    Generate Data From Schema    [source]    [target=api|ui]    [amount=1]    [use_ai=False]
+    ${data}=    Generate Data From Schema    [source]    [method=]    [target=api|ui]    [amount=1]    [use_ai=False]
 
 **Zdroje dat**
 
@@ -126,12 +126,15 @@ Musí být specifikován **právě jeden** ze zdrojů:
     *Příklad:* ``./user.json``, ``./login_form.json``
 
 ``endpoint`` (volitelný)
-    Endpoint ve formátu ``METODA /cesta`` (např. ``POST /users``, ``GET /items/{id}``).
+    Cesta k endpointu. Lze zadat dvěma způsoby:
+
+    * S parametrem ``method=`` jen jako cesta (např. ``/users``) — **doporučeno**
+    * Bez ``method=`` ve formátu ``METODA /cesta`` (např. ``POST /users``) — pro zpětnou kompatibilitu
 
     *Typ:* ``string``
     *Použití:* Pro práci s načtenými OpenAPI specifikacemi
-    *Vyžaduje:* Předchozí volání ``Load Schema``
-    *Příklad:* ``POST /users``, ``GET /pet/findByStatus``
+    *Vyžaduje:* Předchozí volání ``Load Schema`` (pokud není použito ``openapi_url``)
+    *Příklad:* ``/users``, ``/pet/findByStatus``, ``POST /users``
 
 ``openapi_url`` (volitelný)
     URL adresa online OpenAPI specifikace.
@@ -142,6 +145,14 @@ Musí být specifikován **právě jeden** ze zdrojů:
     *Příklad:* ``https://api.example.com/swagger.json``
 
 **Parametry**
+
+``method`` (volitelný, *od verze 0.4.0*)
+    HTTP metoda endpointu. **Preferovaný způsob** specifikace HTTP metody — vyhýbá se problémům s parsováním mezery v Robot Frameworku, kdy by Robot Framework rozdělil hodnotu ``POST /users`` na dva argumenty.
+
+    *Typ:* ``string``
+    *Použití:* Spolu s parametrem ``endpoint`` (cesta bez metody) nebo ``openapi_url``
+    *Hodnoty:* ``GET``, ``POST``, ``PUT``, ``PATCH``, ``DELETE``, ``HEAD``, ``OPTIONS`` (case-insensitive)
+    *Příklad:* ``method=POST``, ``method=GET``
 
 ``target`` (volitelný)
     Formát výstupních dat.
@@ -332,14 +343,26 @@ Používá se pro práci s OpenAPI specifikacemi. Ideální pro:
 **Pracovní postup:**
 
 1. Načtěte OpenAPI soubor pomocí ``Load Schema``
-2. Použijte ``endpoint`` ve formátu ``METODA /cesta``
+2. Použijte ``endpoint`` (volitelně s parametrem ``method=``)
 3. TalosForge automaticky najde odpovídající schéma v načtené specifikaci
 
 **Formát endpointu:**
 
-* Metoda HTTP velkými písmeny (např. ``POST``, ``GET``, ``PUT``, ``DELETE``)
-* Mezera
-* Cesta k endpointu (např. ``/users``, ``/users/{id}``, ``/api/v1/items``)
+Od verze 0.4.0 jsou podporovány dvě syntaxe:
+
+**Nová syntaxe (doporučeno)** — samostatný parametr ``method=`` a čistá cesta:
+
+.. code-block:: robotframework
+
+    ${data}=    Generate Data From Schema    method=POST    endpoint=/users
+
+**Stará syntaxe (zpětná kompatibilita)** — metoda v hodnotě ``endpoint``:
+
+.. code-block:: robotframework
+
+    ${data}=    Generate Data From Schema    endpoint=POST /users
+
+Stará syntaxe stále funguje, ale Robot Framework může mezeru chápat jako oddělovač argumentů u některých nastavení — preferuj proto novou syntaxi.
 
 **Příklady endpointů:**
 
@@ -501,6 +524,264 @@ Pokud nevíte jaké endpointy jsou v OpenAPI specifikaci, podívejte se do logu:
         Create User    ${user}
         Create Item    ${item}
         Create Order    ${order}
+
+.. _keyword-validate-data-against-schema:
+
+Validate Data Against Schema
+----------------------------
+
+*Od verze 0.4.0.*
+
+**Účel**
+
+Validuje data proti JSON Schema nebo OpenAPI 3.0 response schématu. Tento keyword je „opačnou stranou mince" k ``Generate Data From Schema`` — používá stejné typy zdrojů (lokální schéma, načtená OpenAPI specifikace, online OpenAPI URL), ale data nevytváří, nýbrž je kontroluje proti deklarovanému kontraktu.
+
+Typické použití:
+
+* Ověření odpovědi (response body) z reálného API proti OpenAPI specifikaci
+* Kontrola, že vámi zkonstruovaný požadavek odpovídá schématu před odesláním
+* Round-trip kontrolní smyčka: vygenerovaná data → odeslat na API → response validovat proti stejnému OpenAPI
+
+**Syntaxe**
+
+.. code-block:: robotframework
+
+    Validate Data Against Schema    data=<data>    [source]    [method=]    [response_code=200]    [return_errors=False]
+
+**Zdroje dat**
+
+Musí být specifikován **právě jeden** ze zdrojů (stejně jako u ``Generate Data From Schema``):
+
+``schema_path`` (volitelný)
+    Cesta k lokálnímu JSON schématu.
+
+    *Typ:* ``string``
+    *Příklad:* ``./user.json``
+
+``endpoint`` (volitelný)
+    Cesta k endpointu z předem načtené OpenAPI specifikace. Lze kombinovat s ``method=`` (doporučeno) nebo zadat ve formátu ``METODA /cesta`` (zpětná kompatibilita).
+
+    *Typ:* ``string``
+    *Vyžaduje:* Předchozí volání ``Load Schema``, nebo souběžné použití s ``openapi_url``
+    *Příklad:* ``/users``, ``POST /users``
+
+``openapi_url`` (volitelný)
+    URL adresa online OpenAPI specifikace.
+
+    *Typ:* ``string``
+    *Vyžaduje:* ``endpoint`` (a typicky ``method``)
+    *Příklad:* ``https://api.example.com/openapi.yaml``
+
+**Parametry**
+
+``data`` (povinný)
+    Data k validaci — typicky parsované tělo HTTP odpovědi (slovník nebo seznam).
+
+    *Typ:* ``dict`` nebo ``list``
+
+``method`` (volitelný)
+    HTTP metoda endpointu. Stejné chování jako u ``Generate Data From Schema`` — preferovaný způsob specifikace HTTP metody.
+
+    *Typ:* ``string``
+    *Hodnoty:* ``GET``, ``POST``, ``PUT``, ``PATCH``, ``DELETE``, ``HEAD``, ``OPTIONS``
+    *Příklad:* ``method=POST``
+
+``response_code`` (volitelný)
+    HTTP status code, jehož response schéma se má použít pro validaci. Používá se pouze u zdrojů ``endpoint`` a ``openapi_url``.
+
+    *Typ:* ``int``
+    *Výchozí:* ``200``
+    *Příklad:* ``response_code=${201}``, ``response_code=${404}``
+
+``return_errors`` (volitelný)
+    Pokud je ``True``, keyword nehodí výjimku při neplatných datech, ale vrátí seznam chybových slovníků.
+
+    *Typ:* ``bool``
+    *Výchozí:* ``False``
+
+**Návratová hodnota**
+
+* ``return_errors=False`` (výchozí): vrací ``None`` při úspěchu; při neúspěchu vyhodí ``DataValidationError`` se zprávou obsahující všechny nalezené chyby.
+* ``return_errors=True``: vrací **seznam chybových slovníků** (prázdný seznam = data validní). Každý slovník obsahuje pole:
+
+  * ``path`` — cesta k poli ve stylu JSONPath (``$``, ``$.users[0].email`` apod.)
+  * ``path_parts`` — cesta jako seznam segmentů
+  * ``message`` — lidsky čitelný popis chyby
+  * ``validator`` — typ porušeného omezení (``required``, ``format``, ``minimum``, ``additionalProperties``, ...)
+  * ``validator_value`` — hodnota daného omezení ze schématu
+  * ``instance`` — konkrétní hodnota, která neprošla
+
+**Strict mode (vždy zapnutý)**
+
+.. _validate-strict-mode:
+
+Validace je **vždy ve striktním režimu** — toto chování není parametrizovatelné a je úmyslné. Konkrétně:
+
+* Pole, které není deklarované ve schématu, vyhazuje chybu (``additionalProperties: false`` se automaticky aplikuje na **všechna** ``object`` schémata, včetně vnořených objektů a komponent dosažených přes ``$ref``)
+* Chybějící ``required`` pole vyhazuje chybu
+* Nesoulad typu, formátu (``email``, ``uuid``, ``int32``, ...), ``minLength``/``maxLength``, ``minimum``/``maximum``, ``enum`` apod. vyhazuje chybu
+
+Pokud potřebujete permisivní validaci, validujte proti vlastnímu schématu, ve kterém ``additionalProperties`` výslovně dovolíte.
+
+**Příklady použití**
+
+.. _validate-from-schema-path:
+
+Validace proti lokálnímu JSON schématu
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: robotframework
+
+    *** Settings ***
+    Library     TalosForge
+
+    *** Variables ***
+    ${VALID_USER}      {"username": "honza123", "email": "honza@example.cz", "age": 25}
+    ${INVALID_USER}    {"username": "x", "email": "not-email", "age": 200}
+
+    *** Test Cases ***
+    Validate Valid Data Passes
+        ${data}=    Evaluate    ${VALID_USER}
+        Validate Data Against Schema    data=${data}    schema_path=./user.json
+
+    Validate Invalid Data Raises
+        ${data}=    Evaluate    ${INVALID_USER}
+        Run Keyword And Expect Error    *Validation failed*
+        ...    Validate Data Against Schema    data=${data}    schema_path=./user.json
+
+.. _validate-from-endpoint:
+
+Validace proti response schématu z načtené OpenAPI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: robotframework
+
+    *** Test Cases ***
+    Validate Loaded Endpoint Response Passes
+        Load Schema    swagger_path=./api.yaml
+        ${address}=    Create Dictionary    city=Praha    country=CZ
+        ${data}=    Create Dictionary    id=${1}    name=Jan    address=${address}
+        Validate Data Against Schema
+        ...    data=${data}    method=POST    endpoint=/users    response_code=${201}
+
+.. _validate-from-openapi-url:
+
+Validace proti online OpenAPI specifikaci
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: robotframework
+
+    *** Test Cases ***
+    Validate Against URL Spec Passes
+        ${data}=    Create Dictionary    id=${1}    name=Item-Name
+        Validate Data Against Schema
+        ...    data=${data}    openapi_url=https://api.example.com/openapi.yaml
+        ...    method=POST    endpoint=/items    response_code=${201}
+
+Stažená specifikace je cachována (TTL 1 hodina) — opakovaná volání pro stejnou URL nezpůsobí další HTTP požadavek.
+
+.. _validate-return-errors:
+
+Získání chyb jako seznamu (return_errors)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: robotframework
+
+    *** Test Cases ***
+    Validate With Return Errors Returns List
+        ${data}=    Evaluate    {"username": "x", "email": "not-email", "age": 200}
+        ${errors}=    Validate Data Against Schema
+        ...    data=${data}    schema_path=./user.json    return_errors=${True}
+        Should Not Be Empty    ${errors}
+        # Každá chyba má pole: path, message, validator, validator_value, instance
+
+    Validate Empty Errors For Valid Data
+        ${data}=    Evaluate    {"username": "honza123", "email": "honza@example.cz"}
+        ${errors}=    Validate Data Against Schema
+        ...    data=${data}    schema_path=./user.json    return_errors=${True}
+        Should Be Empty    ${errors}
+
+.. _validate-roundtrip:
+
+Round-trip s Generate Data From Schema
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Validační keyword má smysl kombinovat s ``Generate Data From Schema`` — stejné schéma se použije pro generování i pro kontrolu odpovědi.
+
+.. code-block:: robotframework
+
+    *** Test Cases ***
+    Generate Then Validate Round Trip
+        Load Schema    swagger_path=./api.yaml
+
+        # Generuj request data podle požadavkového schématu
+        ${data}=    Generate Data From Schema    method=POST    endpoint=/items
+
+        # Validuj data proti odpovědnímu schématu (response 201)
+        Validate Data Against Schema
+        ...    data=${data}    method=POST    endpoint=/items    response_code=${201}
+
+V kombinaci s online OpenAPI URL se cache využije pro oba kroky — během round-tripu proběhne pouze jedno stažení specifikace.
+
+**Detailní popis chování**
+
+.. _validate-error-format:
+
+Struktura chybového slovníku
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Pro ``return_errors=True`` má každá položka výsledného seznamu tvar:
+
+.. code-block:: python
+
+    {
+        "path": "$.email",
+        "path_parts": ["email"],
+        "message": "'not-email' is not a 'email'",
+        "validator": "format",
+        "validator_value": "email",
+        "instance": "not-email",
+    }
+
+Pro chybu uvnitř pole se cesta rozšíří o index, např. ``$.users[0].email``.
+
+.. _validate-strict-nested:
+
+Strict mode v praxi
+~~~~~~~~~~~~~~~~~~~
+
+Strict režim platí i pro **vnořené objekty** a **komponenty dosažené přes** ``$ref``:
+
+.. code-block:: robotframework
+
+    *** Test Cases ***
+    Strict Applies To Refd Component
+        # Schéma má User.address: $ref → Address (s required: city).
+        # Pole 'extra' není v Address deklarované, validace selže.
+        Load Schema    swagger_path=./api.yaml
+        ${address}=    Create Dictionary    city=Praha    extra=foo
+        ${data}=    Create Dictionary    id=${1}    name=Jan    address=${address}
+        Run Keyword And Expect Error    *Validation failed*
+        ...    Validate Data Against Schema
+        ...    data=${data}    method=POST    endpoint=/users    response_code=${201}
+
+**Důležité poznámky**
+
+* **Pouze numerické status kódy.** ``response_code=200`` nebo ``response_code=${201}``. Kódy ``default``, ``2XX``, ``4XX`` ze sekce ``responses`` se ignorují (sledováno jako issue).
+* **Pouze ``application/json`` content type.** Endpointy bez ``application/json`` v ``responses[*].content`` nejsou v indexu dostupné.
+* **OpenAPI 3.0 formáty.** Validátor podporuje OpenAPI 3.0 formáty navíc oproti čistému JSON Schema (``int32``, ``int64``, ``float``, ``double``, ``byte``, ``binary``).
+* **Cache pro openapi_url.** Stejná URL se v rámci instance ``TalosForge`` stáhne pouze jednou (TTL 1 hodina) — to platí napříč ``Generate Data From Schema`` i ``Validate Data Against Schema``.
+
+**Chyby**
+
+* ``DataValidationError`` (podtyp ``TalosForgeException``) - data neodpovídají schématu (``return_errors=False``). Atribut ``errors`` obsahuje seznam chybových slovníků.
+* ``TalosForgeException`` - chyba ve zdroji schématu, např.:
+
+  * není specifikován žádný zdroj
+  * ``openapi_url`` bez ``endpoint``
+  * endpoint nebyl nalezen v načtené specifikaci
+  * neexistující ``response_code`` u daného endpointu
+  * URL nelze stáhnout, nebo specifikace má neplatný YAML/JSON
 
 Související kapitoly
 --------------------

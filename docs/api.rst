@@ -16,10 +16,11 @@ Hlavní třída
 
     Hlavní třída TalosForge knihovny pro Robot Framework.
 
-    Poskytuje dva hlavní keywords:
+    Poskytuje tři hlavní keywords:
 
     * :py:meth:`load_schema` - Načte OpenAPI soubor do paměti
     * :py:meth:`generate_data_from_schema` - Generuje testovací data ze schématu
+    * :py:meth:`validate_data_against_schema` - Validuje data proti schématu (od verze 0.4.0)
 
     **Inicializace**
 
@@ -50,12 +51,13 @@ Hlavní třída
 
             Load Schema    swagger_path=./api.yaml
 
-    .. py:method:: generate_data_from_schema(schema_path: str = None, endpoint: str = None, openapi_url: str = None, target: str = 'api', amount: int = 1, use_ai: bool = False) -> Any
+    .. py:method:: generate_data_from_schema(schema_path: str = None, method: str = None, endpoint: str = None, openapi_url: str = None, target: str = 'api', amount: int = 1, use_ai: bool = False) -> Any
 
         Generuje testovací data na základě schématu.
 
         :param schema_path: Cesta k JSON schématu
-        :param endpoint: Endpoint ve formátu ``METODA /cesta``
+        :param method: HTTP metoda (``GET``, ``POST``, ...). Doporučený způsob specifikace metody (od verze 0.4.0). Vyžaduje ``endpoint``.
+        :param endpoint: Cesta k endpointu (s ``method=`` jen cesta, bez ``method=`` ve formátu ``METODA /cesta``)
         :param openapi_url: URL k online OpenAPI specifikaci
         :param target: ``api`` nebo ``ui``
         :param amount: Počet záznamů
@@ -70,11 +72,53 @@ Hlavní třída
             # Z JSON schématu
             ${user}=    Generate Data From Schema    schema_path=./user.json
 
-            # Z endpointu
+            # Z endpointu (nová syntaxe)
+            ${data}=    Generate Data From Schema    method=POST    endpoint=/users
+
+            # Z endpointu (zpětně kompatibilní syntaxe)
             ${data}=    Generate Data From Schema    endpoint=POST /users
 
             # Více záznamů
-            ${users}=    Generate Data From Schema    endpoint=POST /users    amount=5
+            ${users}=    Generate Data From Schema    method=POST    endpoint=/users    amount=5
+
+    .. py:method:: validate_data_against_schema(data: Any, schema_path: str = None, endpoint: str = None, method: str = None, openapi_url: str = None, response_code: int = 200, return_errors: bool = False) -> Optional[List[Dict[str, Any]]]
+
+        Validuje data proti JSON Schema nebo OpenAPI 3.0 response schématu (od verze 0.4.0).
+
+        Strict mode je vždy zapnutý: extra pole, chybějící ``required`` pole, type/format/range nesoulady vyhazují chybu.
+
+        :param data: Data k validaci (slovník nebo seznam)
+        :param schema_path: Cesta k lokálnímu JSON schématu
+        :param endpoint: Endpoint z načtené OpenAPI (volitelně s ``method=``)
+        :param method: HTTP metoda pro endpoint
+        :param openapi_url: URL k OpenAPI specifikaci (vyžaduje ``endpoint``)
+        :param response_code: HTTP status code response schématu (default ``200``)
+        :param return_errors: Pokud ``True``, vrací seznam chyb místo raise
+        :return: ``None`` při validních datech (return_errors=False), nebo seznam chybových slovníků (return_errors=True; prázdný seznam = validní)
+        :raises DataValidationError: Pokud return_errors=False a data neodpovídají schématu
+        :raises TalosForgeException: Pokud zdroj není platný nebo schéma/endpoint není nalezeno
+
+        **Příklady:**
+
+        .. code-block:: robotframework
+
+            # Proti lokálnímu JSON schématu
+            ${data}=    Create Dictionary    name=Jan    email=jan@example.cz
+            Validate Data Against Schema    data=${data}    schema_path=./user.json
+
+            # Proti response schématu z načtené OpenAPI
+            Load Schema    swagger_path=./api.yaml
+            Validate Data Against Schema    data=${response}
+            ...    method=POST    endpoint=/users    response_code=${201}
+
+            # Proti online OpenAPI URL
+            Validate Data Against Schema    data=${response}
+            ...    openapi_url=https://api.example.com/openapi.yaml
+            ...    method=GET    endpoint=/items    response_code=${200}
+
+            # Získat chyby jako seznam
+            ${errors}=    Validate Data Against Schema    data=${data}
+            ...    schema_path=./user.json    return_errors=${True}
 
 Core moduly
 -----------
@@ -137,6 +181,8 @@ Core moduly obsahují klíčové komponenty pro generování dat.
     * ``load_openapi_spec(spec_path)`` - Načte OpenAPI specifikaci (JSON/YAML)
     * ``extract_endpoint_schemas(spec)`` - Extrahuje schémata z requestBody
     * ``load_openapi_spec_from_url(spec_url)`` - Stáhne specifikaci z URL
+    * ``extract_response_schemas(spec)`` - *(od verze 0.4.0)* Extrahuje response schémata z OpenAPI 3.0 specifikace. Vrací slovník ``{"METHOD /path": {status_code: schema}}`` pro numerické status kódy a ``application/json`` content type.
+    * ``build_registry(spec)`` - *(od verze 0.4.0)* Postaví ``referencing.Registry`` pro resolution ``$ref`` odkazů v OpenAPI specifikaci. Použito interně ``SchemaValidator``em pro validaci proti komponentám z ``components.schemas``.
 
 .. py:class:: TalosForge.utils.cache.SimpleCache
 
@@ -152,6 +198,45 @@ Core moduly obsahují klíčové komponenty pro generování dat.
     * ``size()`` - Velikost cache
     * ``cleanup()`` - Odstraní expirované položky
 
+Validation modul
+----------------
+
+*Od verze 0.4.0.*
+
+.. py:module:: TalosForge.validation
+    :synopsis: Validace dat proti JSON Schema / OpenAPI 3.0
+
+.. py:class:: TalosForge.validation.validator.SchemaValidator
+
+    Wrapper kolem ``openapi_schema_validator.OAS30Validator`` s **vždy zapnutým strict režimem** (``additionalProperties: false`` se rekurzivně aplikuje na všechny ``object`` schémata, včetně vnořených objektů a komponent dosažených přes ``$ref``).
+
+    .. py:method:: __init__(schema: Dict[str, Any], registry: Optional[referencing.Registry] = None)
+
+        :param schema: JSON Schema nebo OpenAPI 3.0 schéma fragment
+        :param registry: Volitelný ``referencing.Registry`` pro resolution ``$ref`` odkazů (typicky postavený přes :py:meth:`SchemaLoader.build_registry`)
+
+    .. py:method:: validate(data: Any, return_errors: bool = False) -> Optional[List[Dict[str, Any]]]
+
+        Validuje ``data`` proti schématu.
+
+        :param data: Data k validaci
+        :param return_errors: Pokud ``True``, vrátí seznam chybových slovníků místo raise
+        :return: ``None`` při úspěchu (return_errors=False), nebo seznam chyb (return_errors=True; prázdný = validní)
+        :raises DataValidationError: Pokud return_errors=False a validace selhala
+
+.. py:module:: TalosForge.validation.error_formatter
+    :synopsis: Formátování chyb z jsonschema
+
+.. py:function:: TalosForge.validation.error_formatter.format_path(path_parts) -> str
+
+    Převede deque/seznam segmentů cesty na řetězec ve stylu JSONPath.
+
+    Příklady: ``[]`` → ``"$"``, ``["users", 0, "email"]`` → ``"$.users[0].email"``.
+
+.. py:function:: TalosForge.validation.error_formatter.error_to_dict(error) -> Dict[str, Any]
+
+    Převede ``jsonschema.exceptions.ValidationError`` na serializovatelný slovník s poli ``path``, ``path_parts``, ``message``, ``validator``, ``validator_value``, ``instance``.
+
 Výjimky
 --------
 
@@ -160,3 +245,16 @@ Výjimky
     Základní výjimka pro TalosForge.
 
     Všechny chyby v knihovně dědí od této třídy.
+
+.. py:exception:: TalosForge.validation.exceptions.DataValidationError
+
+    *Od verze 0.4.0.*
+
+    Vyhozená keywordem :py:meth:`validate_data_against_schema` (a třídou :py:class:`SchemaValidator`) pokud data neprojdou strict-mode validací.
+
+    Dědí od :py:exc:`TalosForgeException`.
+
+    Atributy:
+
+    * ``message`` (str) — lidsky čitelná zpráva s výpisem všech chyb
+    * ``errors`` (list[dict]) — seznam chybových slovníků (stejná struktura jako návratová hodnota ``validate(..., return_errors=True)``)
