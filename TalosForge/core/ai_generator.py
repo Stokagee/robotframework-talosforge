@@ -10,15 +10,9 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from .config import (
-    DEFAULT_OPENAI_MODEL,
-    DEFAULT_ZHIPU_MODEL,
-    OPENAI_API_KEY,
-    ZHIPU_API_KEY,
-    get_active_ai_provider,
-    is_ai_available,
-)
+from .config import get_config, get_active_ai_provider, is_ai_available
 from .exceptions import TalosForgeException
+from ..utils.logger import log_error, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -41,38 +35,37 @@ class AIGenerator:
 
     def __init__(self):
         """Inicializuje AIGenerator a nastaví AI klienty."""
+        self.config = get_config()
         self.openai_client = None
         self.zhipu_client = None
         self.active_provider = get_active_ai_provider()
 
         # Inicializace OpenAI klienta
-        if OPENAI_API_KEY:
+        if self.config.openai_api_key:
             try:
                 from openai import OpenAI
 
-                self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
-                logger.info("OpenAI klient inicializován")
+                self.openai_client = OpenAI(api_key=self.config.openai_api_key)
             except ImportError:
-                logger.warning("openai balíček není nainstalován")
+                log_warning("Balíček 'openai' není nainstalován. AI generování přes OpenAI nebude dostupné.")
             except Exception as e:
-                logger.warning(f"Nepodařilo se inicializovat OpenAI: {e}")
+                log_warning(f"Nepodařilo se inicializovat OpenAI klienta: {e}")
 
         # Inicializace Zhipu AI klienta
-        if ZHIPU_API_KEY:
+        if self.config.zhipu_api_key:
             try:
                 # Zhipu AI SDK - ověřit název balíčku
                 try:
                     from zhipuai import ZhipuAI
 
-                    self.zhipu_client = ZhipuAI(api_key=ZHIPU_API_KEY)
-                    logger.info("Zhipu AI klient inicializován")
+                    self.zhipu_client = ZhipuAI(api_key=self.config.zhipu_api_key)
                 except ImportError:
-                    logger.warning("zhipuai balíček není nainstalován")
+                    log_warning("Balíček 'zhipuai' není nainstalován. AI generování přes Zhipu AI nebude dostupné.")
             except Exception as e:
-                logger.warning(f"Nepodařilo se inicializovat Zhipu AI: {e}")
+                log_warning(f"Nepodařilo se inicializovat Zhipu AI klienta: {e}")
 
         if not is_ai_available():
-            logger.warning("Žádný AI provider není k dispozici")
+            log_warning("Žádný AI provider není k dispozici")
 
     def generate(
         self,
@@ -146,6 +139,15 @@ class AIGenerator:
         instructions = []
         instructions.append("Generate a single data value for a property in a test data structure.")
 
+        # Informace o locale - generovat ve správném jazyce
+        locale = self.config.locale
+        if locale.startswith("en_"):
+            instructions.append("Generate data in English (en_US locale).")
+        elif locale.startswith("cs_"):
+            instructions.append("Generate data in Czech (cs_CZ locale).")
+        else:
+            instructions.append(f"Generate data in {locale} locale.")
+
         # Informace o target
         if target == "ui":
             instructions.append(
@@ -212,7 +214,7 @@ class AIGenerator:
         """
         try:
             response = self.openai_client.chat.completions.create(
-                model=DEFAULT_OPENAI_MODEL,
+                model=self.config.openai_model,
                 messages=[
                     {
                         "role": "system",
@@ -225,6 +227,7 @@ class AIGenerator:
             )
             return response.choices[0].message.content
         except Exception as e:
+            log_error(f"Chyba při volání OpenAI API: {e}")
             raise TalosForgeException(f"Chyba při volání OpenAI API: {e}")
 
     def _call_zhipu_api(self, prompt: str) -> str:
@@ -243,7 +246,7 @@ class AIGenerator:
         try:
             # Zhipu AI API volání - ověřit správné API
             response = self.zhipu_client.chat.completions.create(
-                model=DEFAULT_ZHIPU_MODEL,
+                model=self.config.zhipu_model,
                 messages=[
                     {
                         "role": "system",
@@ -256,6 +259,7 @@ class AIGenerator:
             )
             return response.choices[0].message.content
         except Exception as e:
+            log_error(f"Chyba při volání Zhipu AI API: {e}")
             raise TalosForgeException(f"Chyba při volání Zhipu AI API: {e}")
 
     def _parse_ai_response(self, response: str) -> Any:
