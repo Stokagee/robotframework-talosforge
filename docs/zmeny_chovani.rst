@@ -3,6 +3,30 @@ Změny chování v TalosForge
 
 Tento dokument obsahuje seznam změn chování, které mohou ovlivnit existující kód.
 
+Verze 0.4.1 (nepublikováno)
+----------------------------
+
+Fallback pro ``response_code`` ve ``Validate Data Against Schema``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Změna:** Pokud OpenAPI definice neobsahuje přesný numerický status kód, validace nově padá na range bucket (``2XX``, ``4XX`` …) a poté na ``default``. Není to breaking change — chování pro definice s explicitním numerickým kódem zůstává identické.
+
+Pořadí rozlišení (první shoda vyhrává):
+
+1. **Přesný numerický kód** (např. ``200``, ``404``)
+2. **Range bucket** podle první číslice (``1XX`` … ``5XX``)
+3. **``default``** response
+
+Předchozí chování (≤0.4.0): ``response_code=404`` vůči definici s pouze ``4XX`` nebo ``default`` skončilo s ``TalosForgeException`` ("No schema for status code 404").
+
+Nové chování (0.4.1+): ``response_code=404`` se nejprve pokusí najít explicitní ``404``, pak ``4XX``, pak ``default``. Validace selže pouze tehdy, když nesedí ani jedna ze tří úrovní.
+
+**Důvod:** OpenAPI 3.0 specifikace běžně používají range a ``default`` kódy pro chybové odpovědi (viz `issue #2 <https://github.com/Stokagee/robotframework-talosforge/issues/2>`_).
+
+**Mimo scope:** OpenAPI 3.1 patterny, webhooks a callback responses nejsou podporovány.
+
+**Související API změna:** ``SchemaLoader.extract_response_schemas()`` nyní vrací i range a ``default`` klíče. Návratový typ se mění z ``Dict[str, Dict[int, ...]]`` na ``Dict[str, Dict[int | str, ...]]`` — numerické kódy zůstávají jako ``int``, range a ``default`` jsou ``str``. Konzumenti, kteří spoléhali na "jenom int" v klíčích, musí typ rozšířit.
+
 Verze 0.4.0 (2026-05-05)
 -------------------------
 

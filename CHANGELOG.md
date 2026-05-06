@@ -4,6 +4,22 @@ Všechny významné změny projektu TalosForge budou dokumentovány v tomto soub
 
 Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Přidáno
+- **Response code fallback ve `Validate Data Against Schema`**: numeric → range → default
+  ([issue #2](https://github.com/Stokagee/robotframework-talosforge/issues/2))
+  - `SchemaLoader.extract_response_schemas()` nyní vrací i range klíče
+    (`1XX`–`5XX`, normalizované na uppercase) a `default`
+  - Nový helper `SchemaLoader.resolve_response_schema(schemas, response_code)`
+    aplikuje fallback (exact → bucket → default)
+  - Validace selže pouze tehdy, když nesedí ani jedna ze tří úrovní
+
+### Změněno
+- Návratový typ `extract_response_schemas` z `Dict[str, Dict[int, …]]` na
+  `Dict[str, Dict[int | str, …]]` — numerické kódy zůstávají `int`,
+  range a default jsou `str`
+
 ## [0.4.0] - 2026-05-05
 
 ### Přidáno
@@ -38,7 +54,6 @@ Formát je založen na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `referencing>=0.30` (transitivně přes `jsonschema>=4.18`, použito pro $ref registry)
 
 ### Mimo scope (sledováno jako issues)
-- Statuové kódy `default` a range (`2XX`, `4XX`) v response validaci: https://github.com/Stokagee/robotframework-talosforge/issues/2
 - Public `Clear Schema Cache` keyword pro explicit URL cache invalidation: GitHub issue (URL TBD)
 - Generator: `nullable: true` se ignoruje (`_is_nullable` helper existuje, ale není zapojený v dispatchi)
 - Generator: `_handle_oneof_anyof_allof` se nikdy nevolá z `generate()` dispatcheru

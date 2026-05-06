@@ -7,8 +7,9 @@ JSON Schema a OpenAPI specifikací z lokálních souborů i URL.
 
 import json
 import logging
+import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 import requests
 import yaml
@@ -336,15 +337,41 @@ class SchemaLoader:
         except Exception as e:
             raise TalosForgeException(f"Neočekávaná chyba při zpracování {spec_url}: {e}")
 
+    @staticmethod
+    def _normalize_response_key(status_code: str) -> Union[int, str, None]:
+        """Normalize an OpenAPI response key to int (numeric), str (range/default), or None.
+
+        Accepted forms:
+        - "200" → 200
+        - "2XX"/"2xx" → "2XX" (1XX-5XX only)
+        - "default" → "default"
+        Anything else returns None.
+        """
+        if not isinstance(status_code, str):
+            return None
+        if status_code == "default":
+            return "default"
+        if re.fullmatch(r"[1-5][xX]{2}", status_code):
+            return status_code.upper()
+        try:
+            return int(status_code)
+        except ValueError:
+            return None
+
     def extract_response_schemas(
         self, spec: Dict[str, Any]
-    ) -> Dict[str, Dict[int, Dict[str, Any]]]:
+    ) -> Dict[str, Dict[Union[int, str], Dict[str, Any]]]:
         """
         Extrahuje response schémata z OpenAPI 3.0 specifikace.
 
-        Vrací slovník mapující "METHOD /path" na {status_code: schema}.
-        Jen numerické status code se zahrnují; 'default', '2XX' a '4XX'
-        se ignorují (viz https://github.com/Stokagee/robotframework-talosforge/issues/2).
+        Vrací slovník mapující "METHOD /path" na {status_key: schema}, kde
+        status_key je:
+        - int — explicitní numerický kód (200, 404, ...)
+        - str "1XX".."5XX" — range kód (vždy normalizovaný na uppercase)
+        - str "default" — fallback definice
+
+        Validace s fallbackem (numeric → range → default) je řešena ve
+        validate_data_against_schema (TalosForge.__init__).
 
         Schémata se vrací beze změny — $refs nejsou pre-resolvnuty.
         Pro $ref resolution použij build_registry() a předej ho do
@@ -354,14 +381,14 @@ class SchemaLoader:
             spec: OpenAPI 3.0 specifikace.
 
         Returns:
-            Slovník {"METHOD /path": {status_code: schema}}.
-            Endpointy bez numerických response kódů nebo bez application/json
-            content nejsou zahrnuty.
+            Slovník {"METHOD /path": {status_key: schema}}.
+            Endpointy bez rozpoznatelných response kódů nebo bez
+            application/json content nejsou zahrnuty.
 
         Raises:
             TalosForgeException: pokud spec neobsahuje paths.
         """
-        result: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        result: Dict[str, Dict[Union[int, str], Dict[str, Any]]] = {}
 
         paths = spec.get("paths", {})
         if not paths:
@@ -379,13 +406,12 @@ class SchemaLoader:
                     continue
 
                 responses = method_spec.get("responses", {})
-                response_schemas: Dict[int, Dict[str, Any]] = {}
+                response_schemas: Dict[Union[int, str], Dict[str, Any]] = {}
                 for status_code, response_def in responses.items():
                     if not isinstance(response_def, dict):
                         continue
-                    try:
-                        code = int(status_code)
-                    except (ValueError, TypeError):
+                    key = self._normalize_response_key(status_code)
+                    if key is None:
                         continue
 
                     content = response_def.get("content", {})
@@ -395,13 +421,32 @@ class SchemaLoader:
 
                     schema = json_content.get("schema")
                     if schema:
-                        response_schemas[code] = schema
+                        response_schemas[key] = schema
 
                 if response_schemas:
-                    key = f"{method.upper()} {path}"
-                    result[key] = response_schemas
+                    endpoint_key = f"{method.upper()} {path}"
+                    result[endpoint_key] = response_schemas
 
         return result
+
+    @staticmethod
+    def resolve_response_schema(
+        schemas: Dict[Union[int, str], Dict[str, Any]],
+        response_code: int,
+    ) -> Union[Dict[str, Any], None]:
+        """Resolve a numeric response_code against a status→schema map.
+
+        Resolution order: exact numeric → matching XX range bucket → default.
+        Returns None if nothing matches.
+        """
+        if response_code in schemas:
+            return schemas[response_code]
+        bucket = f"{response_code // 100}XX"
+        if bucket in schemas:
+            return schemas[bucket]
+        if "default" in schemas:
+            return schemas["default"]
+        return None
 
     def build_registry(self, spec: Dict[str, Any]):
         """

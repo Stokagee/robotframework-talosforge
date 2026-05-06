@@ -231,6 +231,34 @@ Validate Data Against Schema
 ...    data=${data}    method=POST    endpoint=/users    response_code=${201}
 ```
 
+**Response code resolution (OpenAPI 3.0):**
+
+When `response_code` is given, the schema is resolved in the following order:
+
+1. **Exact numeric** match (e.g. `200`, `404`)
+2. **Range bucket** matching the first digit (`1XX`, `2XX`, `3XX`, `4XX`, `5XX`)
+3. **`default`** response
+
+The first match wins. Validation only fails with "no schema for status code …"
+when none of the three is defined. Example — given an OpenAPI definition of:
+
+```yaml
+responses:
+  '201':
+    content: { application/json: { schema: { $ref: '#/components/schemas/User' } } }
+  '4XX':
+    content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  default:
+    content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+```
+
+`response_code=201` picks the explicit `201` schema, `response_code=404` (or
+any other 4xx) falls through to `4XX`, and `response_code=500` falls through
+to `default`.
+
+> Out of scope: OpenAPI 3.1 patterns, webhooks, and callback responses are not
+> supported (see [issue #2](https://github.com/Stokagee/robotframework-talosforge/issues/2)).
+
 ## Supported JSON Schema types
 
 | Type | Supported properties |
