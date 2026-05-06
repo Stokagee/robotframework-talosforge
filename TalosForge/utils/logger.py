@@ -39,10 +39,10 @@ def _colorize(msg: str, level: str) -> str:
         return msg
 
     colors = {
-        'WARNING': Fore.YELLOW,
-        'ERROR': Fore.RED,
+        "WARNING": Fore.YELLOW,
+        "ERROR": Fore.RED,
     }
-    color = colors.get(level, '')
+    color = colors.get(level, "")
     return f"{color}{msg}{Style.RESET_ALL}"
 
 
@@ -110,7 +110,7 @@ def setup_logging(level: int = logging.WARNING) -> None:
     """
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        stream=sys.stdout  # Logovat do stdout pro lepší testování
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,  # Logovat do stdout pro lepší testování
     )

@@ -47,7 +47,9 @@ class AIGenerator:
 
                 self.openai_client = OpenAI(api_key=self.config.openai_api_key)
             except ImportError:
-                log_warning("Balíček 'openai' není nainstalován. AI generování přes OpenAI nebude dostupné.")
+                log_warning(
+                    "Balíček 'openai' není nainstalován. AI generování přes OpenAI nebude dostupné."
+                )
             except Exception as e:
                 log_warning(f"Nepodařilo se inicializovat OpenAI klienta: {e}")
 
@@ -60,7 +62,9 @@ class AIGenerator:
 
                     self.zhipu_client = ZhipuAI(api_key=self.config.zhipu_api_key)
                 except ImportError:
-                    log_warning("Balíček 'zhipuai' není nainstalován. AI generování přes Zhipu AI nebude dostupné.")
+                    log_warning(
+                        "Balíček 'zhipuai' není nainstalován. AI generování přes Zhipu AI nebude dostupné."
+                    )
             except Exception as e:
                 log_warning(f"Nepodařilo se inicializovat Zhipu AI klienta: {e}")
 
@@ -167,7 +171,7 @@ class AIGenerator:
         # Instrukce pro formát výstupu
         instructions.append(
             "Please return only the generated value as a valid JSON string "
-            "(e.g., \"string\", 123, true, {\"key\": \"value\"}, [1,2,3]). "
+            '(e.g., "string", 123, true, {"key": "value"}, [1,2,3]). '
             "Do not include any explanations or markdown formatting."
         )
 

@@ -53,6 +53,7 @@ def ensure_default_config() -> Path:
         # Najít config.example.yml v balíčku
         try:
             import TalosForge as tf_package
+
             package_dir = Path(tf_package.__file__).parent
             example_path = package_dir / "config.example.yml"
 

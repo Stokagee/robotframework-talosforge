@@ -17,7 +17,8 @@ DB_READERS: Dict[str, Type[BaseSchemaReader]] = {}
 # Import a registrace PostgreSQL čtečky (pokud je psycopg2 k dispozici)
 try:
     from .postgres_schema_reader import PostgresSchemaReader
-    DB_READERS['psycopg2'] = PostgresSchemaReader
+
+    DB_READERS["psycopg2"] = PostgresSchemaReader
 except ImportError:
     pass
 
@@ -45,4 +46,4 @@ except ImportError:
 #     pass
 
 
-__all__ = ['BaseSchemaReader', 'DB_READERS']
+__all__ = ["BaseSchemaReader", "DB_READERS"]

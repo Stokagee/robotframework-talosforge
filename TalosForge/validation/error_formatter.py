@@ -43,7 +43,5 @@ def errors_to_message(errors: List[Dict[str, Any]]) -> str:
         return "Validation passed"
     lines = [f"Validation failed with {len(errors)} error(s):"]
     for err in errors:
-        lines.append(
-            f"  - {err['path']}: {err['message']} (validator: {err['validator']})"
-        )
+        lines.append(f"  - {err['path']}: {err['message']} (validator: {err['validator']})")
     return "\n".join(lines)

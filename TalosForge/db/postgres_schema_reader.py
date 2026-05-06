@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Zkusíme importovat psycopg2, pokud není k dispozici, nastavíme příznak
 try:
     import psycopg2
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -27,6 +28,7 @@ except ImportError:
     # Fallback pro testování
     class TalosForgeException(Exception):
         pass
+
 
 try:
     from TalosForge.utils.logger import log_error, log_warning
@@ -43,55 +45,55 @@ except ImportError:
 # None znamená, že typ je auto-generated a neměl by být v generated data
 TYPE_MAP: Dict[str, Optional[Dict[str, Any]]] = {
     # Integer types
-    'integer': {'type': 'integer'},
-    'bigint': {'type': 'integer'},
-    'smallint': {'type': 'integer'},
-    'int2': {'type': 'integer'},
-    'int4': {'type': 'integer'},
-    'int8': {'type': 'integer'},
+    "integer": {"type": "integer"},
+    "bigint": {"type": "integer"},
+    "smallint": {"type": "integer"},
+    "int2": {"type": "integer"},
+    "int4": {"type": "integer"},
+    "int8": {"type": "integer"},
     # Auto-generated - vrátí None pro označení jako system-generated
-    'serial': None,
-    'bigserial': None,
+    "serial": None,
+    "bigserial": None,
     # Numeric types
-    'numeric': {'type': 'number'},
-    'decimal': {'type': 'number'},
-    'real': {'type': 'number'},
-    'double precision': {'type': 'number'},
-    'float4': {'type': 'number'},
-    'float8': {'type': 'number'},
+    "numeric": {"type": "number"},
+    "decimal": {"type": "number"},
+    "real": {"type": "number"},
+    "double precision": {"type": "number"},
+    "float4": {"type": "number"},
+    "float8": {"type": "number"},
     # String types
-    'character varying': {'type': 'string'},
-    'varchar': {'type': 'string'},
-    'text': {'type': 'string'},
-    'bpchar': {'type': 'string'},
-    'char': {'type': 'string'},
-    'character': {'type': 'string'},
+    "character varying": {"type": "string"},
+    "varchar": {"type": "string"},
+    "text": {"type": "string"},
+    "bpchar": {"type": "string"},
+    "char": {"type": "string"},
+    "character": {"type": "string"},
     # Boolean
-    'boolean': {'type': 'boolean'},
-    'bool': {'type': 'boolean'},
+    "boolean": {"type": "boolean"},
+    "bool": {"type": "boolean"},
     # Date/Time
-    'date': {'type': 'string', 'format': 'date'},
-    'timestamp': {'type': 'string', 'format': 'date-time'},
-    'timestamp without time zone': {'type': 'string', 'format': 'date-time'},
-    'timestamp with time zone': {'type': 'string', 'format': 'date-time'},
-    'timestamptz': {'type': 'string', 'format': 'date-time'},
-    'time': {'type': 'string', 'format': 'time'},
-    'time without time zone': {'type': 'string', 'format': 'time'},
-    'time with time zone': {'type': 'string', 'format': 'time'},
-    'timetz': {'type': 'string', 'format': 'time'},
+    "date": {"type": "string", "format": "date"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "timestamp without time zone": {"type": "string", "format": "date-time"},
+    "timestamp with time zone": {"type": "string", "format": "date-time"},
+    "timestamptz": {"type": "string", "format": "date-time"},
+    "time": {"type": "string", "format": "time"},
+    "time without time zone": {"type": "string", "format": "time"},
+    "time with time zone": {"type": "string", "format": "time"},
+    "timetz": {"type": "string", "format": "time"},
     # UUID
-    'uuid': {'type': 'string', 'format': 'uuid'},
+    "uuid": {"type": "string", "format": "uuid"},
     # JSON
-    'json': {'type': 'object'},
-    'jsonb': {'type': 'object'},
+    "json": {"type": "object"},
+    "jsonb": {"type": "object"},
     # Binary
-    'bytea': {'type': 'string', 'contentEncoding': 'base64'},
+    "bytea": {"type": "string", "contentEncoding": "base64"},
     # Array types (jednoduchá reprezentace)
-    'array': {'type': 'array'},
-    '_text': {'type': 'array', 'items': {'type': 'string'}},
-    '_int4': {'type': 'array', 'items': {'type': 'integer'}},
+    "array": {"type": "array"},
+    "_text": {"type": "array", "items": {"type": "string"}},
+    "_int4": {"type": "array", "items": {"type": "integer"}},
     # Custom enum types (uživatelské typy)
-    'orderstatus': {'type': 'string'},
+    "orderstatus": {"type": "string"},
 }
 
 
@@ -139,10 +141,7 @@ class PostgresSchemaReader(BaseSchemaReader):
             TalosForgeException: Pokud není nainstalován psycopg2.
         """
         if not PSYCOPG2_AVAILABLE:
-            log_error(
-                "psycopg2 is not installed. "
-                "Install with: pip install psycopg2-binary"
-            )
+            log_error("psycopg2 is not installed. " "Install with: pip install psycopg2-binary")
             raise TalosForgeException(
                 "psycopg2 is required for PostgreSQL support. "
                 "Install with: pip install psycopg2-binary"
@@ -167,7 +166,9 @@ class PostgresSchemaReader(BaseSchemaReader):
         if self._conn is None:
             try:
                 self._conn = psycopg2.connect(self.dsn)
-                logger.info(f"Connected to PostgreSQL database for schema {self.schema}.{self.table}")
+                logger.info(
+                    f"Connected to PostgreSQL database for schema {self.schema}.{self.table}"
+                )
             except Exception as e:
                 log_error(f"Failed to connect to PostgreSQL: {e}")
                 raise TalosForgeException(f"Failed to connect to PostgreSQL: {e}")
@@ -193,9 +194,9 @@ class PostgresSchemaReader(BaseSchemaReader):
             >>> PostgresSchemaReader._is_auto_generated(None, 'NO')
             False
         """
-        if is_identity == 'YES':
+        if is_identity == "YES":
             return True
-        if column_default and 'nextval(' in column_default:
+        if column_default and "nextval(" in column_default:
             return True
         return False
 
@@ -238,18 +239,22 @@ class PostgresSchemaReader(BaseSchemaReader):
                 cur.execute(query, (self.schema, self.table))
                 columns = []
                 for row in cur.fetchall():
-                    columns.append({
-                        'column_name': row[0],
-                        'udt_name': row[1],
-                        'is_nullable': row[2],
-                        'character_maximum_length': row[3],
-                        'numeric_precision': row[4],
-                        'numeric_scale': row[5],
-                        'column_default': row[6],
-                        'is_identity': row[7],
-                        'column_description': row[8],
-                    })
-                logger.info(f"Loaded metadata for {len(columns)} columns from {self.schema}.{self.table}")
+                    columns.append(
+                        {
+                            "column_name": row[0],
+                            "udt_name": row[1],
+                            "is_nullable": row[2],
+                            "character_maximum_length": row[3],
+                            "numeric_precision": row[4],
+                            "numeric_scale": row[5],
+                            "column_default": row[6],
+                            "is_identity": row[7],
+                            "column_description": row[8],
+                        }
+                    )
+                logger.info(
+                    f"Loaded metadata for {len(columns)} columns from {self.schema}.{self.table}"
+                )
                 return columns
         except Exception as e:
             log_error(f"Failed to load column metadata: {e}")
@@ -281,11 +286,7 @@ class PostgresSchemaReader(BaseSchemaReader):
         # Detekce auto-generated sloupců
         if self._is_auto_generated(column_default, is_identity):
             logger.debug(f"Column '{column_name}' is auto-generated, marking as readOnly")
-            return {
-                "type": "integer",
-                "readOnly": True,
-                "x-system-generated": True
-            }
+            return {"type": "integer", "readOnly": True, "x-system-generated": True}
 
         # Získání mapování typu
         json_schema = TYPE_MAP.get(udt_name.lower())
@@ -326,7 +327,7 @@ class PostgresSchemaReader(BaseSchemaReader):
         required: List[str] = []
 
         for col_meta in columns_metadata:
-            col_name = col_meta['column_name']
+            col_name = col_meta["column_name"]
 
             # Vyloučení sloupců
             if col_name in self.exclude_columns:
@@ -335,12 +336,12 @@ class PostgresSchemaReader(BaseSchemaReader):
 
             # Mapování typu na JSON Schema
             json_schema = self._map_type_to_json_schema(
-                udt_name=col_meta['udt_name'],
+                udt_name=col_meta["udt_name"],
                 column_name=col_name,
-                is_nullable=col_meta['is_nullable'],
-                column_default=col_meta['column_default'],
-                is_identity=col_meta['is_identity'],
-                column_description=col_meta.get('column_description'),
+                is_nullable=col_meta["is_nullable"],
+                column_default=col_meta["column_default"],
+                is_identity=col_meta["is_identity"],
+                column_description=col_meta.get("column_description"),
             )
 
             # Auto-generated sloupce (SERIAL, IDENTITY) - přeskočíme ve výstupu
@@ -349,13 +350,13 @@ class PostgresSchemaReader(BaseSchemaReader):
                 continue
 
             # Přidání maxLength pro string typy s omezenou délkou
-            if json_schema.get('type') == 'string' and col_meta['character_maximum_length']:
-                json_schema['maxLength'] = col_meta['character_maximum_length']
+            if json_schema.get("type") == "string" and col_meta["character_maximum_length"]:
+                json_schema["maxLength"] = col_meta["character_maximum_length"]
 
             properties[col_name] = json_schema
 
             # Required pole (NOT NULL bez DEFAULT)
-            if col_meta['is_nullable'] == 'NO' and col_meta['column_default'] is None:
+            if col_meta["is_nullable"] == "NO" and col_meta["column_default"] is None:
                 required.append(col_name)
 
         schema = {
@@ -385,4 +386,4 @@ class PostgresSchemaReader(BaseSchemaReader):
                 self._conn = None
 
 
-__all__ = ['PostgresSchemaReader', 'TYPE_MAP']
+__all__ = ["PostgresSchemaReader", "TYPE_MAP"]

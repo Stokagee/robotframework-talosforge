@@ -591,7 +591,11 @@ class TalosForge:
             # GitHub issue #TODO.
             spec = self.schema_loader.load_openapi_spec_from_url(openapi_url)
             return self._validate_against_spec(
-                spec, key, response_code, data, return_errors,
+                spec,
+                key,
+                response_code,
+                data,
+                return_errors,
                 source_label=f"spec at {openapi_url}",
             )
 
@@ -606,12 +610,14 @@ class TalosForge:
             for spec in self._loaded_specs.values():
                 if key in self.schema_loader.extract_response_schemas(spec):
                     return self._validate_against_spec(
-                        spec, key, response_code, data, return_errors,
+                        spec,
+                        key,
+                        response_code,
+                        data,
+                        return_errors,
                         source_label="any loaded OpenAPI spec",
                     )
-            raise TalosForgeException(
-                f"Endpoint '{key}' not found in any loaded OpenAPI spec"
-            )
+            raise TalosForgeException(f"Endpoint '{key}' not found in any loaded OpenAPI spec")
 
         raise TalosForgeException(
             "Musí být specifikován právě jeden zdroj: schema_path, endpoint nebo openapi_url"
@@ -637,13 +643,9 @@ class TalosForge:
 
         response_schemas = self.schema_loader.extract_response_schemas(spec)
         if key not in response_schemas:
-            raise TalosForgeException(
-                f"Endpoint '{key}' not found in {source_label}"
-            )
+            raise TalosForgeException(f"Endpoint '{key}' not found in {source_label}")
         # Resolution order: exact numeric → 'NXX' range bucket → 'default'.
-        schema = self.schema_loader.resolve_response_schema(
-            response_schemas[key], response_code
-        )
+        schema = self.schema_loader.resolve_response_schema(response_schemas[key], response_code)
         if schema is None:
             available = sorted(response_schemas[key].keys(), key=str)
             raise TalosForgeException(

@@ -42,7 +42,9 @@ class SchemaLoader:
         >>> endpoints = loader.extract_endpoint_schemas(spec)
     """
 
-    def __init__(self, use_cache: bool = True, cache_ttl: int = 3600, allow_external_refs: bool = False):
+    def __init__(
+        self, use_cache: bool = True, cache_ttl: int = 3600, allow_external_refs: bool = False
+    ):
         """
         Inicializuje SchemaLoader instanci.
 
@@ -143,6 +145,7 @@ class SchemaLoader:
             try:
                 logger.info(f"Loading OpenAPI spec with external refs enabled: {spec_path}")
                 import os
+
                 old_cwd = os.getcwd()
                 try:
                     # Change to spec directory so prance can resolve relative paths
@@ -151,10 +154,19 @@ class SchemaLoader:
 
                     # Use lazy=False for immediate parsing while in correct directory
                     try:
-                        parser = ResolvingParser(os.path.basename(str(path)), lazy=False, strict=False, backend='openapi-spec-validator')
+                        parser = ResolvingParser(
+                            os.path.basename(str(path)),
+                            lazy=False,
+                            strict=False,
+                            backend="openapi-spec-validator",
+                        )
                     except Exception:
-                        logger.debug("openapi-spec-validator backend failed, trying without backend")
-                        parser = ResolvingParser(os.path.basename(str(path)), lazy=False, strict=False)
+                        logger.debug(
+                            "openapi-spec-validator backend failed, trying without backend"
+                        )
+                        parser = ResolvingParser(
+                            os.path.basename(str(path)), lazy=False, strict=False
+                        )
 
                     # Get specification before changing CWD back
                     spec = parser.specification
@@ -170,8 +182,7 @@ class SchemaLoader:
                 raise
             except Exception as e:
                 log_warning(
-                    f"Prance failed to parse {spec_path}: {e}. "
-                    "Falling back to simple loader."
+                    f"Prance failed to parse {spec_path}: {e}. " "Falling back to simple loader."
                 )
 
         try:
@@ -237,8 +248,7 @@ class SchemaLoader:
                 current = current[part]
             else:
                 raise TalosForgeException(
-                    f"Reference '{ref}' nebyla nalezena. "
-                    f"Část '{part}' neexistuje."
+                    f"Reference '{ref}' nebyla nalezena. " f"Část '{part}' neexistuje."
                 )
 
         # Validace výsledku
@@ -278,7 +288,7 @@ class SchemaLoader:
             return False
 
         # Regex pro HTTP metodu (uppercase) + mezera + cesta začínající /
-        pattern = re.compile(r'^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+')
+        pattern = re.compile(r"^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+")
 
         # Zjistit zda alespoň jeden klíč odpovídá vzoru
         for key in spec.keys():
@@ -310,13 +320,13 @@ class SchemaLoader:
             dict_keys(['POST /api/v1/users'])
         """
         endpoints = {}
-        pattern = re.compile(r'^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+')
+        pattern = re.compile(r"^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/.+")
 
         for key, value in spec.items():
             if isinstance(key, str) and pattern.match(key):
-                if isinstance(value, dict) and 'schema' in value:
+                if isinstance(value, dict) and "schema" in value:
                     # Klíč je už ve správném formátu "METHOD /path"
-                    endpoints[key] = value['schema']
+                    endpoints[key] = value["schema"]
                     logger.debug(f"Extrahováno flat schéma pro: {key}")
 
         logger.info(f"Extrahováno {len(endpoints)} flat endpoint schémat")
@@ -365,7 +375,15 @@ class SchemaLoader:
             # Procházení všech HTTP metod v cestě
             for method, method_spec in path_item.items():
                 # Zajímají nás jen HTTP metody
-                if method.lower() not in ("get", "post", "put", "patch", "delete", "options", "head"):
+                if method.lower() not in (
+                    "get",
+                    "post",
+                    "put",
+                    "patch",
+                    "delete",
+                    "options",
+                    "head",
+                ):
                     continue
 
                 if not isinstance(method_spec, dict):
@@ -394,7 +412,9 @@ class SchemaLoader:
                         ref = schema["$ref"]
                         # Skip external refs silently (they don't start with #/)
                         if not ref.startswith("#/"):
-                            logger.debug(f"Přeskakuji endpoint s externí ref: {method.upper()} {path} - {ref}")
+                            logger.debug(
+                                f"Přeskakuji endpoint s externí ref: {method.upper()} {path} - {ref}"
+                            )
                             continue
                         # Resolve internal refs (will raise exception if invalid)
                         schema = self._resolve_ref(spec, ref)
@@ -481,7 +501,9 @@ class SchemaLoader:
                 logger.info(f"Loading OpenAPI spec from URL with external refs enabled: {spec_url}")
                 # Use lazy=False for immediate parsing
                 try:
-                    parser = ResolvingParser(spec_url, lazy=False, strict=False, backend='openapi-spec-validator')
+                    parser = ResolvingParser(
+                        spec_url, lazy=False, strict=False, backend="openapi-spec-validator"
+                    )
                 except Exception:
                     logger.debug("openapi-spec-validator backend failed, trying without backend")
                     parser = ResolvingParser(spec_url, lazy=False, strict=False)
@@ -501,13 +523,13 @@ class SchemaLoader:
                 raise
             except Exception as e:
                 log_warning(
-                    f"Prance failed to parse {spec_url}: {e}. "
-                    "Falling back to simple loader."
+                    f"Prance failed to parse {spec_url}: {e}. " "Falling back to simple loader."
                 )
 
         try:
             # Stáhnout specifikaci
             import time
+
             start = time.time()
             response = requests.get(spec_url, timeout=30)
             elapsed = time.time() - start
@@ -712,7 +734,5 @@ class SchemaLoader:
         for comp_schema in components_schemas.values():
             SchemaValidator._enforce_strict(comp_schema)
 
-        resource = Resource.from_contents(
-            spec_copy, default_specification=DRAFT202012
-        )
+        resource = Resource.from_contents(spec_copy, default_specification=DRAFT202012)
         return Registry().with_resource(uri=SPEC_URI, resource=resource)

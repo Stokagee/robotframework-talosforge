@@ -55,11 +55,7 @@ class SchemaValidator:
         """
         if isinstance(node, dict):
             for key, value in node.items():
-                if (
-                    key == "$ref"
-                    and isinstance(value, str)
-                    and value.startswith("#")
-                ):
+                if key == "$ref" and isinstance(value, str) and value.startswith("#"):
                     node[key] = base_uri + value
                 else:
                     SchemaValidator._rewrite_fragment_refs(value, base_uri)
